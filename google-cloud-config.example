@@ -1,0 +1,15 @@
+# Adicionar ao arquivo .env.local
+
+# Google Cloud Document AI Configuration
+GOOGLE_CLOUD_PROJECT_ID=your-project-id
+GOOGLE_CLOUD_LOCATION=us
+GOOGLE_DOCUMENT_AI_PROCESSOR_ID=your-processor-id
+
+# Controle de Custos
+GOOGLE_AI_DAILY_LIMIT=10  # Máximo 10 páginas por dia via Google AI
+
+# Opção 1: Usar arquivo de chave JSON
+GOOGLE_CLOUD_KEY_FILE=/path/to/service-account-key.json
+
+# Opção 2: Usar credenciais de aplicação padrão (recomendado em produção)
+# GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json

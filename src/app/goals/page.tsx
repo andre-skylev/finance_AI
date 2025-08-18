@@ -1,0 +1,154 @@
+"use client"
+
+import { useState, useEffect } from 'react'
+import { createClient } from '@/lib/supabase/client'
+import { useAuth } from '@/components/AuthProvider'
+import { useLanguage } from '../../contexts/LanguageContext'
+import ProtectedRoute from '@/components/ProtectedRoute'
+import { Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Dialog, DialogTrigger } from '@/components/ui/dialog'
+import { GoalCard, Goal } from './components/GoalCard'
+import { GoalForm, GoalFormValues } from './components/GoalForm'
+
+export default function GoalsPage() {
+  const { user } = useAuth()
+  const { t } = useLanguage()
+  const supabase = createClient()
+  const [goals, setGoals] = useState<Goal[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isFormOpen, setIsFormOpen] = useState(false)
+  const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
+
+  useEffect(() => {
+    if (user) {
+      fetchGoals()
+    }
+  }, [user])
+
+  const fetchGoals = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+
+      if (error) throw error
+      setGoals(data || [])
+    } catch (error) {
+      console.error('Error fetching goals:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleFormSubmit = async (values: GoalFormValues) => {
+    try {
+      if (editingGoal) {
+        // Update existing goal
+        const { error } = await supabase
+          .from('goals')
+          .update({
+            name: values.name,
+            description: values.description,
+            target_amount: values.target_amount,
+            currency: values.currency,
+            target_date: values.target_date,
+          })
+          .eq('id', editingGoal.id)
+        if (error) throw error
+      } else {
+        // Create new goal
+        const { error } = await supabase.from('goals').insert([
+          {
+            user_id: user?.id,
+            name: values.name,
+            description: values.description,
+            target_amount: values.target_amount,
+            current_amount: 0,
+            currency: values.currency,
+            target_date: values.target_date,
+            is_completed: false,
+          },
+        ])
+        if (error) throw error
+      }
+
+      fetchGoals()
+      setIsFormOpen(false)
+      setEditingGoal(null)
+    } catch (error: any) {
+      alert(t('messages.errorSaving') + error.message)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm(t('goals.deleteConfirm'))) return
+    try {
+      const { error } = await supabase.from('goals').delete().eq('id', id)
+      if (error) throw error
+      fetchGoals()
+    } catch (error) {
+      console.error('Error deleting goal:', error)
+    }
+  }
+
+  const handleEdit = (goal: Goal) => {
+    setEditingGoal(goal)
+    setIsFormOpen(true)
+  }
+
+  if (loading) {
+    return (
+      <ProtectedRoute>
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        </div>
+      </ProtectedRoute>
+    )
+  }
+
+  return (
+    <ProtectedRoute>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-semibold">{t('goals.title')}</h1>
+            <p className="text-muted-foreground">{t('goals.subtitle')}</p>
+          </div>
+          <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <DialogTrigger asChild>
+              <Button onClick={() => setEditingGoal(null)}>
+                <Plus className="h-5 w-5 mr-2" />
+                {t('goals.newGoal')}
+              </Button>
+            </DialogTrigger>
+            <GoalForm
+              onSubmit={handleFormSubmit}
+              initialValues={editingGoal ? {
+                name: editingGoal.name,
+                description: editingGoal.description || '',
+                target_amount: editingGoal.target_amount,
+                currency: editingGoal.currency as "EUR" | "BRL",
+                target_date: editingGoal.target_date || '',
+              } : undefined}
+            />
+          </Dialog>
+        </div>
+
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {goals.map((goal) => (
+            <GoalCard key={goal.id} goal={goal} onDelete={handleDelete} onEdit={handleEdit} />
+          ))}
+        </div>
+
+        {goals.length === 0 && (
+          <div className="text-center py-12">
+            <p className="text-muted-foreground">{t('goals.createFirst')}</p>
+          </div>
+        )}
+      </div>
+    </ProtectedRoute>
+  )
+}
