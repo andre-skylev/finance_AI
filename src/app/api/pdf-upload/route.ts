@@ -1,61 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
-import path from 'path'
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 })
 
-// Funções para controle de uso do Google Document AI
-async function checkDailyUsage(): Promise<number> {
-  try {
-    const today = new Date().toISOString().split('T')[0]
-    const supabase = await createClient()
-    
-    const { data, error } = await supabase
-      .from('google_ai_usage')
-      .select('count')
-      .eq('date', today)
-      .single()
-    
-    if (error && error.code !== 'PGRST116') { // Não é erro de "não encontrado"
-      console.error('Erro ao verificar uso diário:', error)
-      return 0
-    }
-    
-    return data?.count || 0
-  } catch (error) {
-    console.error('Erro ao verificar uso diário:', error)
-    return 0
-  }
-}
-
-async function incrementDailyUsage(): Promise<void> {
-  try {
-    const today = new Date().toISOString().split('T')[0]
-    const supabase = await createClient()
-    
-    const { error } = await supabase
-      .from('google_ai_usage')
-      .upsert({
-        date: today,
-        count: await checkDailyUsage() + 1
-      })
-    
-    if (error) {
-      console.error('Erro ao incrementar uso diário:', error)
-    }
-  } catch (error) {
-    console.error('Erro ao incrementar uso diário:', error)
-  }
+// Helper: Limpar e normalizar texto extraído
+function cleanExtractedText(text: string): string {
+  return text
+    .replace(/\s+/g, ' ') // Múltiplos espaços para um
+    .replace(/[\r\n]+/g, '\n') // Normalizar quebras de linha
+    .replace(/[^\S\r\n]+/g, ' ') // Remover espaços estranhos
+    .trim()
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now()
+  
   try {
     const supabase = await createClient()
     
-    // Verificar autenticação
+    // Auth check
     const { data: { user }, error: authError } = await supabase.auth.getUser()
     if (authError || !user) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
@@ -64,331 +30,360 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const file = formData.get('file') as File
     
+    // Validações
     if (!file) {
       return NextResponse.json({ error: 'Nenhum arquivo fornecido' }, { status: 400 })
     }
 
     if (file.type !== 'application/pdf') {
-      return NextResponse.json({ error: 'Apenas arquivos PDF são aceitos' }, { status: 400 })
+      return NextResponse.json({ error: 'Apenas PDFs são aceitos' }, { status: 400 })
     }
 
-    if (file.size > 10 * 1024 * 1024) { // 10MB
+    if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: 'Arquivo muito grande (máximo 10MB)' }, { status: 400 })
     }
 
-    console.log(`Processando PDF: ${file.size} bytes`)
+    console.log(`\n📄 Processando PDF: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`)
+    console.log('='.repeat(50))
 
     const buffer = Buffer.from(await file.arrayBuffer())
     let extractedText = ''
+    let extractionMethod = ''
+    let confidence = 0
 
-    // Estratégia simplificada: pdf-parse primeiro, Google Document OCR como fallback
+    // ========================================
+    // MÉTODO PRINCIPAL: pdf-parse com configuração correta
+    // ========================================
     try {
-      // Método 1: pdf-parse (gratuito) para PDFs com texto selecionável
-      const Module = require('module')
-      const originalRequire = Module.prototype.require
-
-      // Patch temporário para pdf-parse
-      Module.prototype.require = function(...args: any[]) {
-        if (args[0] === 'fs') {
-          const fs = originalRequire.apply(this, arguments)
-          return {
-            ...fs,
-            readFileSync: (path: string, options?: any) => {
-              if (typeof path === 'string' && path.includes('pdf-parse')) {
-                throw new Error('ENOENT: no such file or directory')
-              }
-              return fs.readFileSync(path, options)
-            }
-          }
-        }
-        return originalRequire.apply(this, arguments)
-      }
-
-      const pdfParse = require('pdf-parse')
+      console.log('🔍 Extraindo texto do PDF...')
       
-      // Restaurar require original
-      Module.prototype.require = originalRequire
-      
-      const pdfData = await pdfParse(buffer, {
-        max: 0, // Processar todas as páginas
-        pagerender: () => null, // Evitar renderização de páginas
-        normalizeWhitespace: true,
-        disableCombineTextItems: false
-      })
-      
-      extractedText = pdfData.text || ''
-      console.log(`Texto extraído via pdf-parse: ${extractedText.length} caracteres`)
-      
-    } catch (parseError) {
-      console.log('pdf-parse falhou, usando Google Document OCR...')
-      
-      // Método 2: Google Cloud Vision OCR (pago) para PDFs escaneados ou complexos
+      // Importar pdf-parse de forma segura
+      let pdfParse: any
       try {
-        // Verificar se atingiu limite diário (controle de custos)
-        const dailyUsage = await checkDailyUsage()
-        const DAILY_LIMIT = parseInt(process.env.GOOGLE_AI_DAILY_LIMIT || '50')
+        pdfParse = require('pdf-parse/lib/pdf-parse')
+      } catch {
+        pdfParse = require('pdf-parse')
+      }
+      
+      // Configuração robusta para pdf-parse
+      const pdfData = await pdfParse(buffer)
+      
+      if (pdfData && pdfData.text) {
+        extractedText = cleanExtractedText(pdfData.text)
+        extractionMethod = 'pdf-parse'
+        confidence = 95
+        console.log(`✅ Texto extraído: ${extractedText.length} caracteres`)
+        console.log(`   Páginas: ${pdfData.numpages || 'desconhecido'}`)
+        console.log(`   Info: ${pdfData.info?.Title || 'sem título'}`)
+      }
+    } catch (error: any) {
+      console.log(`⚠️ pdf-parse encontrou problema: ${error.message}`)
+      console.log('   Tentando método alternativo...')
+    }
+
+    // ========================================
+    // FALLBACK: Tentar com pdfjs-dist se disponível
+    // ========================================
+    if (!extractedText || extractedText.length < 200) {
+      try {
+        console.log('🔍 Tentando método alternativo com pdfjs...')
         
-        if (dailyUsage >= DAILY_LIMIT) {
-          throw new Error('Limite diário do Google Vision OCR atingido')
-        }
-
-        const vision = await import('@google-cloud/vision')
+        // Tentar importar pdfjs-dist
+        const pdfjsLib = await import('pdfjs-dist')
         
-        // Resolver caminho das credenciais
-        const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
-        const resolvedCredentialsPath = credentialsPath?.startsWith('./') 
-          ? path.resolve(process.cwd(), credentialsPath)
-          : credentialsPath
+        // Configurar worker inline
+        pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`
         
-        const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
-        // Use 'eu' region endpoint for Vision API
-        const location = process.env.GOOGLE_CLOUD_REGION || 'eu'
+        const loadingTask = pdfjsLib.getDocument({ data: buffer })
+        const pdfDocument = await loadingTask.promise
         
-        // Configurar cliente Google Vision com endpoint EU
-        const client = new vision.ImageAnnotatorClient({
-          projectId: projectId,
-          keyFilename: resolvedCredentialsPath,
-          apiEndpoint: location === 'eu' ? 'eu-vision.googleapis.com' : undefined,
-        })
-
-        if (!projectId) {
-          throw new Error('Credenciais do Google Cloud não configuradas')
-        }
-
-        console.log('Processando com Google Vision OCR (custo aplicado)...')
-
-        // Para PDFs, precisamos processar de forma diferente
-        // Vision API tem melhor suporte via async batch processing para PDFs
-        try {
-          // Primeiro tenta processar como documento
-          const [result] = await client.textDetection({
-            image: {
-              content: buffer,
-            },
-          })
-
-          if (result.fullTextAnnotation?.text) {
-            extractedText = result.fullTextAnnotation.text
-            console.log(`Texto extraído via Google Vision OCR: ${extractedText.length} caracteres`)
-          } else if (result.textAnnotations && result.textAnnotations.length > 0) {
-            // Fallback para texto simples
-            extractedText = result.textAnnotations[0].description || ''
-            console.log(`Texto extraído via Google Vision OCR (annotations): ${extractedText.length} caracteres`)
-          } else {
-            // Se ainda não conseguiu, tenta converter PDF para imagem primeiro
-            console.log('Vision API não conseguiu processar PDF diretamente, tentando método alternativo...')
-            
-            // Usar pdf-parse para extrair páginas como texto
-            const pdfParse = require('pdf-parse')
-            const pdfData = await pdfParse(buffer)
-            
-            if (pdfData.text && pdfData.text.trim().length > 50) {
-              extractedText = pdfData.text
-              console.log(`Texto extraído via pdf-parse (fallback): ${extractedText.length} caracteres`)
-            } else {
-              throw new Error('PDF não contém texto extraível')
-            }
-          }
+        let fullText = ''
+        const numPages = pdfDocument.numPages
+        console.log(`   Processando ${numPages} páginas...`)
+        
+        for (let i = 1; i <= numPages; i++) {
+          const page = await pdfDocument.getPage(i)
+          const textContent = await page.getTextContent()
           
-          // Registrar uso para controle de limite apenas se usou Vision API
-          if (extractedText && result) {
-            await incrementDailyUsage()
-          }
-        } catch (visionError: any) {
-          console.log('Erro no Vision API, tentando pdf-parse como último recurso...')
+          const pageText = textContent.items
+            .map((item: any) => item.str)
+            .join(' ')
           
-          // Último recurso: tentar pdf-parse novamente
-          const pdfParse = require('pdf-parse')
-          try {
-            const pdfData = await pdfParse(buffer)
-            if (pdfData.text && pdfData.text.trim().length > 50) {
-              extractedText = pdfData.text
-              console.log(`Texto extraído via pdf-parse (último recurso): ${extractedText.length} caracteres`)
-            } else {
-              throw new Error('PDF não contém texto extraível')
-            }
-          } catch (finalError) {
-            throw new Error('Google Vision OCR não conseguiu extrair texto deste PDF')
-          }
-        }
-
-      } catch (googleError: any) {
-        console.error('Erro no Google Vision OCR:', googleError)
-        
-        if (googleError.message?.includes('limite diário')) {
-          throw new Error('Limite diário de processamento atingido. Tente novamente amanhã ou use um PDF com texto selecionável.')
+          fullText += pageText + '\n'
         }
         
-        if (googleError.message?.includes('não configuradas')) {
-          throw new Error('Google Cloud não configurado. Configure as credenciais para processar PDFs escaneados.')
+        if (fullText.trim().length > 200) {
+          extractedText = cleanExtractedText(fullText)
+          extractionMethod = 'pdfjs-dist'
+          confidence = 90
+          console.log(`✅ Texto extraído via pdfjs: ${extractedText.length} caracteres`)
         }
-        
-        throw new Error('Não foi possível processar este PDF. Verifique se é um documento válido com texto legível.')
+      } catch (error: any) {
+        console.log(`   pdfjs não disponível ou falhou: ${error.message}`)
       }
     }
 
-    if (!extractedText.trim()) {
-      throw new Error('PDF não contém texto extraível')
+    // ========================================
+    // VALIDAÇÃO FINAL
+    // ========================================
+    if (!extractedText || extractedText.length < 100) {
+      console.log('\n❌ FALHA: Não foi possível extrair texto suficiente')
+      console.log('   Possíveis causas:')
+      console.log('   1. PDF escaneado (imagem em vez de texto)')
+      console.log('   2. PDF protegido ou corrompido')
+      console.log('   3. PDF com estrutura não padrão')
+      
+      return NextResponse.json({
+        error: 'Não foi possível extrair texto do PDF',
+        details: {
+          textLength: extractedText.length,
+          fileSize: file.size,
+          fileName: file.name,
+          suggestion: 'Por favor, use um PDF digital (não escaneado) baixado diretamente do seu banco. PDFs escaneados precisam de OCR que não está disponível no momento.'
+        }
+      }, { status: 400 })
     }
 
-    // Identificar banco usando IA
-    console.log('Identificando banco...')
-    
-    // Buscar padrões conhecidos para contexto
-    const { data: knownBanks } = await supabase
-      .from('bank_patterns')
-      .select('bank_name, patterns')
-      .limit(50)
-    
-    const knownBanksContext = knownBanks?.map(bank => 
-      `${bank.bank_name}: ${bank.patterns}`
-    ).join('\n') || ''
+    console.log('\n' + '='.repeat(50))
+    console.log(`✅ TEXTO EXTRAÍDO COM SUCESSO`)
+    console.log(`   Método: ${extractionMethod}`)
+    console.log(`   Tamanho: ${extractedText.length} caracteres`)
+    console.log(`   Confiança: ${confidence}%`)
+    console.log('='.repeat(50) + '\n')
 
-    const bankIdentification = await openai.chat.completions.create({
+    // ========================================
+    // PROCESSAMENTO COM IA
+    // ========================================
+    console.log('🤖 Analisando documento com OpenAI...')
+    
+    // Detectar tipo de documento
+    const docTypeCheck = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `Você é um especialista em identificação de bancos e instituições financeiras. Analise o texto fornecido e identifique o banco/instituição, mesmo que não esteja na lista de bancos conhecidos. Seja preciso e retorne apenas o nome do banco.`
+          content: 'Identifique o tipo de documento e o banco. Responda APENAS em JSON: {"type": "credit_card" ou "bank_statement", "bank": "nome do banco", "period": "período se disponível"}'
         },
         {
           role: 'user',
-          content: `Analise este texto de extrato/fatura e identifique o banco/instituição, mesmo que seja desconhecido:${knownBanksContext}\n\nTEXTO DO DOCUMENTO:\n${extractedText}`
+          content: extractedText.substring(0, 2000)
         }
       ],
       temperature: 0,
-      max_tokens: 100
+      max_tokens: 100,
+      response_format: { type: "json_object" }
     })
-
-    const detectedBank = bankIdentification.choices[0]?.message?.content?.trim() || 'Banco não identificado'
-    console.log(`Banco identificado: ${detectedBank}`)
-
-    // Buscar contas do usuário para contexto
-    const { data: accounts } = await supabase
-      .from('accounts')
-      .select('id, name, bank_name')
-      .eq('user_id', user.id)
-
-    // Extrair transações usando IA
-    const transactionExtraction = await openai.chat.completions.create({
+    
+    const docInfo = JSON.parse(docTypeCheck.choices[0].message.content || '{}')
+    console.log(`📋 Documento: ${docInfo.type}, Banco: ${docInfo.bank}`)
+    
+    // Extrair transações
+    const isCard = docInfo.type === 'credit_card'
+    
+    const transactionPrompt = isCard
+      ? `Você é um especialista em faturas de cartão de crédito. Extraia TODAS as transações.
+         Para cada transação: data (formato YYYY-MM-DD), comerciante, valor (sempre positivo), categoria.
+         Se houver parcelas, indique como "X/Y" no campo installment_info.
+         Detecte múltiplos cartões se houver (diferentes números terminados em ****XXXX).`
+      : `Você é um especialista em extratos bancários. Extraia TODAS as transações.
+         Para cada transação: data (formato YYYY-MM-DD), descrição, valor (negativo para débitos, positivo para créditos), categoria.`
+    
+    const extraction = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `Você é um especialista em análise de extratos bancários e faturas de cartão de crédito. Extraia as transações do texto fornecido e retorne em formato JSON.
+          content: `${transactionPrompt}
+          
+Categorias disponíveis: alimentacao, transporte, saude, educacao, lazer, casa, roupas, tecnologia, servicos, transferencia, salario, compras_parceladas, outros
+
+IMPORTANTE: Retorne APENAS um JSON válido, sem texto adicional. Limite-se a 50 transações principais se houver muitas.
 
 Formato esperado:
 {
   "transactions": [
     {
       "date": "YYYY-MM-DD",
-      "description": "Descrição da transação",
-      "amount": number (positivo para créditos, negativo para débitos),
-      "type": "credit" | "debit",
-      "category": "categoria estimada"
+      "merchant": "nome",
+      "description": "descrição curta",
+      "amount": number,
+      "category": "categoria",
+      "type": "debit",
+      "installment_info": null ou "X/Y"
     }
   ],
-  "account_info": {
-    "bank": "nome do banco",
-    "account_number": "número da conta se disponível",
-    "period": "período do extrato se disponível"
+  "cards": [
+    {
+      "last_four": "XXXX",
+      "holder_name": "nome",
+      "brand": "visa"
+    }
+  ],
+  "summary": {
+    "total": number,
+    "period": "MM/YYYY a MM/YYYY",
+    "currency": "EUR"
   }
-}
-
-Categorias possíveis: alimentacao, transporte, saude, educacao, lazer, casa, roupas, tecnologia, servicos, transferencia, salario, outros`
+}`
         },
         {
           role: 'user',
-          content: extractedText
+          content: `Extraia as transações principais (máximo 50) deste documento:\n\n${extractedText.substring(0, 10000)}`
         }
       ],
       temperature: 0.1,
-      max_tokens: 2000
+      max_tokens: 3500,
+      response_format: { type: "json_object" }
     })
-
-    const extractionResult = transactionExtraction.choices[0]?.message?.content?.trim()
     
-    if (!extractionResult) {
-      throw new Error('Não foi possível extrair transações do PDF')
-    }
-
-    // Parse do resultado JSON
-    let parsedResult
+    // Tratamento robusto do JSON
+    let result: any = {}
     try {
-      parsedResult = JSON.parse(extractionResult)
-    } catch {
-      throw new Error('Erro ao processar dados extraídos. Tente com um extrato mais claro.')
+      const rawContent = extraction.choices[0]?.message?.content || '{}'
+      console.log(`   Resposta da IA: ${rawContent.length} caracteres`)
+      
+      // Tentar fazer parse direto
+      result = JSON.parse(rawContent)
+    } catch (parseError: any) {
+      console.log(`⚠️  Erro ao fazer parse do JSON: ${parseError.message}`)
+      console.log('   Tentando correção automática...')
+      
+      try {
+        // Tentar extrair apenas a parte JSON válida
+        const rawContent = extraction.choices[0]?.message?.content || ''
+        const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
+        
+        if (jsonMatch) {
+          // Tentar consertar JSON truncado
+          let fixedJson = jsonMatch[0]
+          
+          // Adicionar fechamentos se necessário
+          const openBrackets = (fixedJson.match(/\[/g) || []).length
+          const closeBrackets = (fixedJson.match(/\]/g) || []).length
+          const openBraces = (fixedJson.match(/\{/g) || []).length
+          const closeBraces = (fixedJson.match(/\}/g) || []).length
+          
+          // Adicionar colchetes faltantes
+          for (let i = closeBrackets; i < openBrackets; i++) {
+            fixedJson += ']'
+          }
+          
+          // Adicionar chaves faltantes
+          for (let i = closeBraces; i < openBraces; i++) {
+            fixedJson += '}'
+          }
+          
+          // Remover vírgula final se houver
+          fixedJson = fixedJson.replace(/,\s*([}\]])/g, '$1')
+          
+          result = JSON.parse(fixedJson)
+          console.log('   ✅ JSON corrigido com sucesso')
+        } else {
+          throw new Error('Não foi possível extrair JSON válido')
+        }
+      } catch (fixError) {
+        console.log('   ❌ Não foi possível corrigir o JSON')
+        // Criar estrutura mínima
+        result = {
+          transactions: [],
+          cards: [],
+          summary: {
+            total: 0,
+            period: 'Não identificado',
+            currency: 'EUR'
+          }
+        }
+      }
     }
-
-    return NextResponse.json({
+    
+    console.log(`✅ Extraídas ${result.transactions?.length || 0} transações`)
+    if (result.cards?.length > 0) {
+      console.log(`💳 Detectados ${result.cards.length} cartões`)
+    }
+    
+    // Detectar informações adicionais de cartões no texto
+    const cardNumbers = [...extractedText.matchAll(/\d{4}\*{6,8}\d{4}/g)].map(m => m[0])
+    const uniqueCards = [...new Set(cardNumbers)]
+    
+    if (uniqueCards.length > 0 && (!result.cards || result.cards.length === 0)) {
+      result.cards = uniqueCards.map(num => ({
+        last_four: num.slice(-4),
+        full_number: num,
+        holder_name: null,
+        brand: null
+      }))
+    }
+    
+    // ========================================
+    // RESPOSTA FINAL
+    // ========================================
+    const processingTime = Date.now() - startTime
+    
+    const response = {
       success: true,
-      detected_bank: detectedBank,
-      extracted_text_length: extractedText.length,
-      transactions: parsedResult.transactions || [],
-      account_info: parsedResult.account_info || {},
-      user_accounts: accounts || [],
-      processing_method: extractedText.length > 1000 ? 'google_ocr' : 'pdf_parse'
-    })
-
+      document: {
+        type: docInfo.type,
+        bank: docInfo.bank || 'Não identificado',
+        period: docInfo.period || result.summary?.period
+      },
+      extraction: {
+        method: extractionMethod,
+        confidence: confidence,
+        textLength: extractedText.length,
+        processingTimeMs: processingTime
+      },
+      transactions: result.transactions || [],
+      cards: result.cards || [],
+      summary: result.summary || {},
+      metadata: {
+        fileName: file.name,
+        fileSize: file.size,
+        processingTime: processingTime,
+        extractionMethod: extractionMethod
+      }
+    }
+    
+    console.log('\n✅ Processamento concluído com sucesso!')
+    console.log(`   Tempo total: ${processingTime}ms`)
+    
+    return NextResponse.json(response)
+    
   } catch (error: any) {
-    console.error('Erro ao processar PDF:', error)
-    
-    // Mensagens específicas baseadas no tipo de erro
-    if (error.message?.includes('Google Cloud não configurado')) {
-      return NextResponse.json({ 
-        error: 'Este PDF é escaneado e requer OCR. Configure as credenciais do Google Cloud para processamento avançado.',
-        suggestion: 'Tente usar um extrato digital (PDF com texto selecionável) do seu banco online.'
-      }, { status: 400 })
-    }
-    
-    if (error.message?.includes('limite diário')) {
-      return NextResponse.json({ 
-        error: 'Limite diário de processamento atingido.',
-        suggestion: 'Tente novamente amanhã ou use PDFs com texto selecionável que são processados gratuitamente.'
-      }, { status: 429 })
-    }
-    
-    return NextResponse.json({ 
-      error: error.message || 'Erro interno do servidor',
-      suggestion: 'Verifique se o PDF é um extrato bancário válido e tente novamente.'
+    console.error('❌ Erro fatal:', error)
+    return NextResponse.json({
+      error: error.message || 'Erro ao processar PDF',
+      suggestion: 'Tente com um PDF diferente ou contate o suporte'
     }, { status: 500 })
   }
 }
 
-// GET endpoint to check OCR usage
-export async function GET(request: NextRequest) {
-  try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+// GET: Verificar status do sistema
+export async function GET() {
+  return NextResponse.json({
+    status: 'ready',
+    methods: {
+      'pdf-parse': { 
+        status: 'active', 
+        description: 'Extração de texto de PDFs digitais',
+        cost: 'free', 
+        confidence: 95 
+      },
+      'pdfjs-dist': { 
+        status: 'fallback', 
+        description: 'Método alternativo para PDFs complexos',
+        cost: 'free', 
+        confidence: 90 
+      },
+      'ocr': {
+        status: 'not_available',
+        description: 'OCR para PDFs escaneados não disponível',
+        suggestion: 'Use PDFs digitais baixados do banco'
+      }
+    },
+    limits: {
+      maxFileSize: '10MB',
+      supportedFormats: ['application/pdf'],
+      requirements: 'PDF deve conter texto selecionável (não escaneado)'
     }
-    
-    // Get current usage
-    const today = new Date().toISOString().split('T')[0]
-    const { data: usageData } = await supabase
-      .from('google_ai_usage')
-      .select('count')
-      .eq('date', today)
-      .single()
-    
-    const currentUsage = usageData?.count || 0
-    const dailyLimit = parseInt(process.env.GOOGLE_AI_DAILY_LIMIT || '50')
-    const remaining = Math.max(0, dailyLimit - currentUsage)
-    
-    return NextResponse.json({
-      dailyLimit,
-      currentUsage,
-      remaining,
-      date: today
-    })
-    
-  } catch (error: any) {
-    console.error('Usage check error:', error)
-    return NextResponse.json({
-      error: 'Failed to check usage'
-    }, { status: 500 })
-  }
+  })
 }
