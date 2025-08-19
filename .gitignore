@@ -21,3 +21,13 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .DS_Store
+.claude
+
+# Credentials - NEVER commit these
+/credentials/
+credentials/
+*.json
+google-credentials.json
+service-account.json
+
+# Build output
