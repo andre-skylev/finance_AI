@@ -21,8 +21,3 @@ pnpm-debug.log*
 .vscode/
 .idea/
 .DS_Store
-
-# Google Cloud Credentials
-credentials/
-google-credentials.json
-*.json

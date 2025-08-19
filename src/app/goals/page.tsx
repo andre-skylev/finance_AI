@@ -7,7 +7,7 @@ import { useLanguage } from '../../contexts/LanguageContext'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogTrigger } from '@/components/ui/dialog'
+import { Dialog } from '@/components/ui/dialog'
 import { GoalCard, Goal } from './components/GoalCard'
 import { GoalForm, GoalFormValues } from './components/GoalForm'
 
@@ -117,13 +117,15 @@ export default function GoalsPage() {
             <h1 className="text-2xl font-semibold">{t('goals.title')}</h1>
             <p className="text-muted-foreground">{t('goals.subtitle')}</p>
           </div>
+          <Button onClick={() => {
+            setEditingGoal(null)
+            setIsFormOpen(true)
+          }}>
+            <Plus className="h-5 w-5 mr-2" />
+            {t('goals.newGoal')}
+          </Button>
+          
           <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingGoal(null)}>
-                <Plus className="h-5 w-5 mr-2" />
-                {t('goals.newGoal')}
-              </Button>
-            </DialogTrigger>
             <GoalForm
               onSubmit={handleFormSubmit}
               initialValues={editingGoal ? {

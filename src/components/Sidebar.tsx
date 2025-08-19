@@ -10,40 +10,47 @@ import {
   Settings,
   LogOut,
   CreditCard,
-  FileUp,
+  ListOrdered,
+  FileText,
+  ReceiptText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
-import { useLanguage } from "../contexts/LanguageContext";
-import { LanguageSelector } from "./LanguageSelector";
+import { LanguageSelector } from "@/components/LanguageSelector";
+import { useLanguage } from "@/contexts/LanguageContext";
 
-const navItems = [
-  { href: "/dashboard", icon: LayoutDashboard, labelKey: "navigation.dashboard" },
-  { href: "/import", icon: FileUp, labelKey: "navigation.import" },
-  { href: "/transactions", icon: ArrowLeftRight, labelKey: "navigation.transactions" },
-  { href: "/installments", icon: CreditCard, labelKey: "navigation.installments" },
-  { href: "/credit-cards", icon: CreditCard, labelKey: "navigation.creditCards" },
-  { href: "/goals", icon: Target, labelKey: "navigation.goals" },
-  { href: "/fixed-costs", icon: Calendar, labelKey: "navigation.fixedCosts" },
-  { href: "/chat", icon: Settings, labelKey: "navigation.chat" },
-  { href: "/settings", icon: Settings, labelKey: "navigation.settings" },
-];
+function useNavItems() {
+  const { t } = useLanguage();
+  return [
+    { href: "/dashboard", icon: LayoutDashboard, label: t("navigation.dashboard") },
+    { href: "/transactions", icon: ArrowLeftRight, label: t("navigation.transactions") },
+    { href: "/pdf-import", icon: FileText, label: t("navigation.import") },
+  { href: "/receipts", icon: ReceiptText, label: t("navigation.receipts") || 'Recibos' },
+    { href: "/credit-cards", icon: CreditCard, label: t("navigation.creditCards") },
+    { href: "/installments", icon: ListOrdered, label: t("navigation.installments") },
+    { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
+    { href: "/goals", icon: Target, label: t("navigation.goals") },
+    { href: "/fixed-costs", icon: Calendar, label: t("navigation.fixedCosts") },
+    { href: "/settings", icon: Settings, label: t("navigation.settings") },
+  ];
+}
 
 export function Sidebar() {
   const pathname = usePathname();
   const { signOut } = useAuth();
+  const navItems = useNavItems();
   const { t } = useLanguage();
 
   return (
-    <div className="hidden border-r bg-muted/40 md:block fixed left-0 top-0 z-40 w-[280px]">
-      <div className="flex h-screen max-h-screen flex-col gap-2">
+    <div className="hidden md:block">
+      <div className="sticky top-0 h-screen border-r bg-muted/40 flex max-h-screen flex-col gap-2 overflow-y-auto">
         <div className="flex h-14 items-center border-b px-4 lg:h-[60px] lg:px-6">
           <Link href="/" className="flex items-center gap-2 font-semibold">
             <Target className="h-6 w-6 text-primary" />
             <span className="">FinanceAI</span>
           </Link>
         </div>
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1">
           <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
             {navItems.map((item) => (
               <Link
@@ -54,17 +61,25 @@ export function Sidebar() {
                 }`}
               >
                 <item.icon className="h-4 w-4" />
-                {t(item.labelKey)}
+                {item.label}
               </Link>
             ))}
           </nav>
         </div>
-        <div className="sticky bottom-0 bg-muted/40 border-t p-4 space-y-2">
-          <LanguageSelector />
-          <Button size="sm" className="w-full" onClick={signOut}>
-            <LogOut className="mr-2 h-4 w-4" />
-            {t('navigation.logout')}
-          </Button>
+        <div className="mt-auto p-4">
+          <div className="flex items-center justify-between gap-2">
+            {/* Language selector on the left */}
+            <LanguageSelector />
+            {/* Compact logout icon on the right */}
+            <button
+              onClick={signOut}
+              title={t('navigation.logout')}
+              aria-label={t('navigation.logout')}
+              className="inline-flex items-center justify-center rounded-md p-2 text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </div>
     </div>

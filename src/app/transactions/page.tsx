@@ -3,20 +3,14 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
-import { useLanguage } from '../../contexts/LanguageContext'
-import ProtectedRoute from '@/components/ProtectedRoute'
-import { AccountManager } from '@/components/AccountManager'
 import { AddTransactionButton } from '@/components/TransactionForm'
-import { Plus, FileText } from 'lucide-react'
-import Link from 'next/link'
 import { columns, Transaction } from './components/columns'
 import { DataTable } from './components/data-table'
-import { Button } from '@/components/ui/button'
+import { MobileTransactionCard } from './components/mobile-transaction-card'
 import { Input } from '@/components/ui/input'
 
 export default function TransactionsPage() {
   const { user } = useAuth()
-  const { t } = useLanguage()
   const supabase = createClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,52 +69,43 @@ export default function TransactionsPage() {
   }
 
   return (
-    <ProtectedRoute>
-      <div className="space-y-8">
-        {/* Seção de Gerenciamento de Contas */}
-        <AccountManager />
-        
-        {/* Separador */}
-        <div className="border-t" />
-        
-        {/* Seção de Transações */}
-        <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-2xl font-semibold">{t('transactions.title')}</h2>
-              <p className="text-muted-foreground">{t('transactions.subtitle')}</p>
-            </div>
-            <div className="flex gap-2">
-              <Button asChild variant="outline">
-                <Link href="/import">
-                  <FileText className="h-5 w-5 mr-2" />
-                  Import PDF
-                </Link>
-              </Button>
-              <AddTransactionButton />
-              <Button asChild variant="outline">
-                <Link href="/import">
-                  <Plus className="h-5 w-5 mr-2" />
-                  {t('transactions.newTransaction')}
-                </Link>
-              </Button>
-            </div>
-          </div>
+    <div className="space-y-6 pb-20 sm:pb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Transactions</h1>
+          <p className="text-muted-foreground text-sm sm:text-base">Manage your financial transactions.</p>
+        </div>
+        <AddTransactionButton onCreated={fetchTransactions} />
+      </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Input
-                placeholder={t('transactions.filterByDescription')}
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                className="max-w-sm"
-              />
-            </div>
-          </div>
-
-          <DataTable columns={columns} data={filteredTransactions} />
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Input
+            placeholder="Filter by description..."
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            className="w-full sm:max-w-sm"
+          />
         </div>
       </div>
-    </ProtectedRoute>
+
+      {/* Desktop table */}
+      <div className="hidden sm:block">
+        <DataTable columns={columns} data={filteredTransactions} />
+      </div>
+      
+      {/* Mobile cards */}
+      <div className="sm:hidden space-y-3">
+        {filteredTransactions.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            No transactions found
+          </div>
+        ) : (
+          filteredTransactions.map((transaction) => (
+            <MobileTransactionCard key={transaction.id} transaction={transaction} />
+          ))
+        )}
+      </div>
+    </div>
   )
 }

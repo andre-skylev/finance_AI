@@ -5,7 +5,9 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 import { useLanguage } from '../../contexts/LanguageContext'
+import { useCategories } from '@/hooks/useFinanceData'
 import { User, CreditCard, Settings, LogOut, Bell, Globe, Lock, Trash2 } from 'lucide-react'
+import { translateCategoryName } from '@/lib/categories'
 
 interface Account {
   id: string
@@ -19,10 +21,17 @@ interface Account {
 export default function SettingsPage() {
   const { user, signOut } = useAuth()
   const { t, language, setLanguage } = useLanguage()
+  const { categories, createCategory, refetch: refetchCategories } = useCategories()
   const supabase = createClient()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [showAccountForm, setShowAccountForm] = useState(false)
+  const [newCategory, setNewCategory] = useState({
+    name: '',
+    type: 'expense' as 'expense' | 'income',
+    color: '#6b7280',
+    icon: ''
+  })
 
   const [accountForm, setAccountForm] = useState({
     name: '',
@@ -80,7 +89,7 @@ export default function SettingsPage() {
     try {
       const balance = parseFloat(accountForm.balance)
       if (isNaN(balance)) {
-        alert('Por favor, insira um saldo válido')
+  alert(t('messages.invalidAmount'))
         return
       }
 
@@ -107,7 +116,7 @@ export default function SettingsPage() {
       setShowAccountForm(false)
       fetchAccounts()
     } catch (error: any) {
-      alert('Erro ao criar conta: ' + error.message)
+      alert(t('messages.errorCreating') + (error?.message || ''))
     }
   }
 
@@ -127,7 +136,7 @@ export default function SettingsPage() {
   }
 
   const deleteAccount = async (accountId: string) => {
-    if (!confirm('Tem a certeza que deseja eliminar esta conta? Esta ação não pode ser desfeita.')) {
+    if (!confirm(t('settings.deleteAccountConfirm'))) {
       return
     }
 
@@ -147,10 +156,10 @@ export default function SettingsPage() {
 
   const getAccountTypeLabel = (type: string) => {
     switch (type) {
-      case 'checking': return 'Conta Corrente'
-      case 'savings': return 'Poupança'
-      case 'credit': return 'Cartão de Crédito'
-      case 'investment': return 'Investimento'
+  case 'checking': return t('settings.accountTypes.checking')
+  case 'savings': return t('settings.accountTypes.savings')
+  case 'credit': return t('settings.accountTypes.credit')
+  case 'investment': return t('settings.accountTypes.investment')
       default: return type
     }
   }
@@ -260,31 +269,113 @@ export default function SettingsPage() {
           </div>
         </div>
 
+    {/* Categories Section */}
+        <div className="bg-white p-6 rounded-lg shadow">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center space-x-3">
+              <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-100">🏷️</span>
+      <h2 className="text-xl font-semibold text-gray-900">{t('categoriesPage.title')}</h2>
+            </div>
+          </div>
+
+          {/* Existing categories (default + custom) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+            {categories.map((c: any) => (
+              <div key={c.id} className="flex items-center justify-between p-3 border border-gray-200 rounded-lg">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c.color }} />
+                  <span className="text-sm">{translateCategoryName(c.name, !!c.is_default, t)}</span>
+                  {c.is_default && (
+                    <span className="ml-1 text-[10px] uppercase text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{t('categoriesPage.default')}</span>
+                  )}
+                </div>
+                <span className="text-xs uppercase text-gray-500">{c.type === 'expense' ? t('categoriesPage.expense') : t('categoriesPage.income')}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Add new category */}
+          <div className="p-4 border border-gray-200 rounded-lg">
+            <h3 className="text-lg font-medium mb-4">{t('categoriesPage.add')}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <div className="md:col-span-2">
+                <label className="block text-sm text-gray-700 mb-1">{t('categoriesPage.name')}</label>
+                <input
+                  type="text"
+                  value={newCategory.name}
+                  onChange={(e) => setNewCategory(prev => ({ ...prev, name: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  placeholder={language === 'pt' ? 'Ex: Alimentação' : 'E.g.: Food'}
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">{t('categoriesPage.type')}</label>
+                <select
+                  value={newCategory.type}
+                  onChange={(e) => setNewCategory(prev => ({ ...prev, type: e.target.value as any }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                >
+                  <option value="expense">{t('categoriesPage.expense')}</option>
+                  <option value="income">{t('categoriesPage.income')}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">{t('categoriesPage.color')}</label>
+                <input
+                  type="color"
+                  value={newCategory.color}
+                  onChange={(e) => setNewCategory(prev => ({ ...prev, color: e.target.value }))}
+                  className="w-full h-10 px-1 py-1 border border-gray-300 rounded-lg"
+                />
+              </div>
+      {/* Icon input removed per request */}
+            </div>
+            <div className="flex justify-end mt-4">
+              <button
+                onClick={async () => {
+                  if (!newCategory.name.trim()) return
+                  await createCategory({
+                    name: newCategory.name.trim(),
+                    type: newCategory.type,
+                    color: newCategory.color,
+        // icon intentionally omitted
+                  })
+                  setNewCategory({ name: '', type: 'expense', color: '#6b7280', icon: '' })
+                  await refetchCategories()
+                }}
+                className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark"
+              >
+                {t('categoriesPage.addButton')}
+              </button>
+            </div>
+          </div>
+        </div>
+
         {/* Accounts Section */}
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <CreditCard className="h-6 w-6 text-gray-600" />
-              <h2 className="text-xl font-semibold text-gray-900">Contas</h2>
+              <h2 className="text-xl font-semibold text-gray-900">{t('settings.accounts')}</h2>
             </div>
             <button
               onClick={() => setShowAccountForm(!showAccountForm)}
               className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
             >
               <CreditCard className="h-4 w-4 mr-2" />
-              Adicionar Conta
+              {t('settings.addAccount')}
             </button>
           </div>
 
           {/* Add Account Form */}
           {showAccountForm && (
             <div className="mb-6 p-4 border border-gray-200 rounded-lg">
-              <h3 className="text-lg font-medium mb-4">Nova Conta</h3>
+              <h3 className="text-lg font-medium mb-4">{t('settings.newAccount')}</h3>
               <form onSubmit={handleAccountSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Nome da Conta
+                      {t('settings.accountName')}
                     </label>
                     <input
                       type="text"
@@ -292,23 +383,23 @@ export default function SettingsPage() {
                       value={accountForm.name}
                       onChange={(e) => setAccountForm(prev => ({ ...prev, name: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
-                      placeholder="Ex: Conta Principal"
+                      placeholder={t('settings.placeholders.accountName')}
                     />
                   </div>
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Tipo de Conta
+                      {t('settings.accountType')}
                     </label>
                     <select
                       value={accountForm.type}
                       onChange={(e) => setAccountForm(prev => ({ ...prev, type: e.target.value }))}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
                     >
-                      <option value="checking">Conta Corrente</option>
-                      <option value="savings">Poupança</option>
-                      <option value="credit">Cartão de Crédito</option>
-                      <option value="investment">Investimento</option>
+                      <option value="checking">{t('settings.accountTypes.checking')}</option>
+                      <option value="savings">{t('settings.accountTypes.savings')}</option>
+                      <option value="credit">{t('settings.accountTypes.credit')}</option>
+                      <option value="investment">{t('settings.accountTypes.investment')}</option>
                     </select>
                   </div>
                 </div>
@@ -316,7 +407,7 @@ export default function SettingsPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Saldo Inicial
+                      {t('settings.initialBalance')}
                     </label>
                     <input
                       type="number"
@@ -331,7 +422,7 @@ export default function SettingsPage() {
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Moeda
+                      {t('settings.currency')}
                     </label>
                     <select
                       value={accountForm.currency}
@@ -350,13 +441,13 @@ export default function SettingsPage() {
                     onClick={() => setShowAccountForm(false)}
                     className="px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    Cancelar
+                    {t('common.cancel')}
                   </button>
                   <button
                     type="submit"
                     className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
                   >
-                    Adicionar
+                    {t('common.add')}
                   </button>
                 </div>
               </form>
@@ -380,7 +471,7 @@ export default function SettingsPage() {
                             ? 'bg-green-100 text-green-800' 
                             : 'bg-gray-100 text-gray-800'
                         }`}>
-                          {account.is_active ? 'Ativa' : 'Inativa'}
+                          {account.is_active ? t('settings.active') : t('settings.inactive')}
                         </span>
                       </div>
                       <p className="text-lg font-semibold text-gray-900 mt-1">
@@ -398,7 +489,7 @@ export default function SettingsPage() {
                             : 'text-green-600 hover:bg-green-50'
                         }`}
                       >
-                        {account.is_active ? 'Desativar' : 'Ativar'}
+                        {account.is_active ? t('settings.deactivate') : t('settings.activate')}
                       </button>
                       <button
                         onClick={() => deleteAccount(account.id)}
@@ -413,7 +504,7 @@ export default function SettingsPage() {
             ) : (
               <div className="text-center py-8">
                 <CreditCard className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-500">Nenhuma conta encontrada</p>
+                <p className="text-gray-500">{t('settings.noAccounts')}</p>
               </div>
             )}
           </div>
@@ -423,13 +514,13 @@ export default function SettingsPage() {
         <div className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center space-x-3 mb-6">
             <Lock className="h-6 w-6 text-gray-600" />
-            <h2 className="text-xl font-semibold text-gray-900">Segurança</h2>
+            <h2 className="text-xl font-semibold text-gray-900">{t('settings.security')}</h2>
           </div>
 
           <div className="space-y-4">
             <button className="w-full sm:w-auto inline-flex items-center px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors">
               <Lock className="h-4 w-4 mr-2" />
-              Alterar Palavra-passe
+              {t('settings.changePassword')}
             </button>
           </div>
         </div>

@@ -1,21 +1,32 @@
 "use client"
 
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
 
-// Dados simulados - em produção viriam da API
-const data = [
-  { month: 'Jan', income: 3200, expenses: 2450, net: 750 },
-  { month: 'Fev', income: 3200, expenses: 2890, net: 310 },
-  { month: 'Mar', income: 3400, expenses: 2650, net: 750 },
-  { month: 'Abr', income: 3200, expenses: 3100, net: 100 },
-  { month: 'Mai', income: 3500, expenses: 2750, net: 750 },
-  { month: 'Jun', income: 3200, expenses: 2400, net: 800 },
-];
-
 export function CashFlow() {
   const { t } = useLanguage();
+  const [data, setData] = useState<Array<{month:string; income:number; expenses:number; net:number}>>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard?type=cash-flow')
+        if (!res.ok) throw new Error('failed')
+        const j = await res.json()
+        if (!cancelled) setData(j.data || [])
+      } catch (_) {
+        if (!cancelled) setData([])
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
 
   return (
     <Card className="col-span-12 lg:col-span-6">
@@ -23,7 +34,10 @@ export function CashFlow() {
         <CardTitle>{t('dashboard.cashFlow')}</CardTitle>
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
+        {(!loading && data.length === 0) ? (
+          <p className="text-sm text-muted-foreground">{t('dashboard.noData') || 'No data yet'}</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
           <ComposedChart data={data}>
             <defs>
               <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
@@ -72,6 +86,7 @@ export function CashFlow() {
             />
           </ComposedChart>
         </ResponsiveContainer>
+        )}
       </CardContent>
     </Card>
   );

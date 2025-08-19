@@ -1,0 +1,42 @@
+{
+  "creditCardsInfo": [
+    {
+      "bank": "Novo Banco",
+      "cardNumber": "0342******9766",
+      "cardHolder": "ANDRE DA CRUZ DE SOUZA",
+      "isDependent": false,
+      "sharedLimit": 7500
+    },
+    {
+      "bank": "Novo Banco",
+      "cardNumber": "0342******8752",
+      "cardHolder": "ANDRE CRUZ SOUZA",
+      "isDependent": true,
+      "sharedLimit": 7500
+    }
+  ],
+  "payload": {
+    "credit_cards_info": [
+      {
+        "bank": "Novo Banco",
+        "cardNumber": "0342******9766",
+        "cardHolder": "ANDRE DA CRUZ DE SOUZA",
+        "isDependent": false,
+        "sharedLimit": 7500
+      },
+      {
+        "bank": "Novo Banco",
+        "cardNumber": "0342******8752",
+        "cardHolder": "ANDRE CRUZ SOUZA",
+        "isDependent": true,
+        "sharedLimit": 7500
+      }
+    ],
+    "expected_cards": 2,
+    "titular_name": "ANDRE DA CRUZ DE SOUZA",
+    "dependent_names": [
+      "ANDRE CRUZ SOUZA"
+    ]
+  },
+  "timestamp": "2025-08-18T14:12:36.145Z"
+}

@@ -333,34 +333,16 @@ export default function AddTransactionPage() {
       default:
         return (
           <>
-            {/* Upload Section */}
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h2 className="text-lg font-semibold text-gray-800 mb-3">Importar de extrato PDF</h2>
-              <p className="text-sm text-gray-500 mb-4">
-                Poupe tempo importando múltiplas transações de uma só vez.
-              </p>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept="application/pdf"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-center px-4 py-3 bg-primary-light text-primary border-2 border-dashed border-primary rounded-lg hover:bg-primary-dark hover:text-white transition-all duration-300"
-              >
-                <Upload className="h-5 w-5 mr-3" />
-                Clique para selecionar um arquivo PDF
-              </button>
+            {/* Import callout to the dedicated page */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-5">
+              <h2 className="text-base font-semibold text-blue-900 mb-1">Importar documentos (extrato/fatura)</h2>
+              <p className="text-sm text-blue-800 mb-3">Use a página de Importação para processar PDFs com IA (extratos bancários e faturas de cartão).</p>
+              <Link href="/pdf-import" className="inline-flex items-center px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                Ir para Importação de PDF
+              </Link>
             </div>
 
-            <div className="relative flex items-center py-2">
-              <div className="flex-grow border-t border-gray-300"></div>
-              <span className="flex-shrink mx-4 text-gray-500 text-sm font-medium">OU ADICIONE MANUALMENTE</span>
-              <div className="flex-grow border-t border-gray-300"></div>
-            </div>
-
+            {/* Manual add form */}
             <form onSubmit={handleSubmit} className="bg-white p-6 rounded-lg shadow space-y-6">
               {/* Formulário manual aqui, sem alterações */}
             </form>

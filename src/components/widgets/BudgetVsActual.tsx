@@ -1,21 +1,82 @@
 "use client"
 
+import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-
-// Dados simulados - em produção viriam da API
-const data = [
-  { category: 'Alimentação', budgeted: 500, actual: 450, variance: -10 },
-  { category: 'Transporte', budgeted: 300, actual: 320, variance: 6.7 },
-  { category: 'Moradia', budgeted: 800, actual: 800, variance: 0 },
-  { category: 'Lazer', budgeted: 200, actual: 280, variance: 40 },
-  { category: 'Saúde', budgeted: 150, actual: 180, variance: 20 },
-  { category: 'Compras', budgeted: 250, actual: 220, variance: -12 },
-];
+import { BarChart3 } from 'lucide-react';
 
 export function BudgetVsActual() {
   const { t } = useLanguage();
+  const [data, setData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard?type=budget-vs-actual');
+        if (!res.ok) {
+          // If unauthorized or not found, just return empty data without throwing error
+          if (res.status === 401 || res.status === 404) {
+            if (!cancelled) setData([]);
+            return;
+          }
+          throw new Error('Failed to load budget data');
+        }
+        const result = await res.json();
+        if (!cancelled) setData(result.data || []);
+      } catch (error) {
+        console.error('Error loading budget data:', error);
+        if (!cancelled) setData([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <Card className="col-span-12 lg:col-span-6">
+        <CardHeader>
+          <CardTitle>{t('dashboard.budgetVsActual')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse space-y-4">
+            <div className="h-[300px] bg-gray-100 rounded-lg"></div>
+            <div className="space-y-2">
+              <div className="h-4 bg-gray-100 rounded w-1/4"></div>
+              <div className="h-3 bg-gray-100 rounded"></div>
+              <div className="h-3 bg-gray-100 rounded"></div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data || data.length === 0) {
+    return (
+      <Card className="col-span-12 lg:col-span-6">
+        <CardHeader>
+          <CardTitle>{t('dashboard.budgetVsActual')}</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center h-[400px] text-center">
+            <BarChart3 className="h-12 w-12 text-gray-400 mb-3" />
+            <p className="text-sm text-muted-foreground">
+              {t('dashboard.noBudgetData') || 'Sem dados de orçamento'}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('dashboard.noBudgetDataDesc') || 'Configure orçamentos para ver comparações'}
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="col-span-12 lg:col-span-6">
@@ -69,28 +130,30 @@ export function BudgetVsActual() {
         </ResponsiveContainer>
         
         {/* Tabela de variações */}
-        <div className="mt-4 space-y-2">
-          <h4 className="text-sm font-medium">{t('dashboard.variances')}</h4>
-          {data.map((item, index) => (
-            <div key={index} className="flex items-center justify-between text-sm">
-              <span>{item.category}</span>
-              <div className="flex items-center gap-2">
-                <span className={`font-medium ${
-                  item.variance > 0 
-                    ? 'text-red-600' 
-                    : item.variance < 0 
-                      ? 'text-green-600' 
-                      : 'text-gray-600'
-                }`}>
-                  {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
-                </span>
-                <span className="text-xs text-muted-foreground">
-                  (€{Math.abs(item.actual - item.budgeted)})
-                </span>
+        {data.length > 0 && (
+          <div className="mt-4 space-y-2">
+            <h4 className="text-sm font-medium">{t('dashboard.variances')}</h4>
+            {data.map((item, index) => (
+              <div key={index} className="flex items-center justify-between text-sm">
+                <span>{item.category}</span>
+                <div className="flex items-center gap-2">
+                  <span className={`font-medium ${
+                    item.variance > 0 
+                      ? 'text-red-600' 
+                      : item.variance < 0 
+                        ? 'text-green-600' 
+                        : 'text-gray-600'
+                  }`}>
+                    {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    (€{Math.abs(item.actual - item.budgeted)})
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

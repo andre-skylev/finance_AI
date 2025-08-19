@@ -2,9 +2,10 @@ import "./globals.css";
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
-import { LanguageProvider } from "../contexts/LanguageContext";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { MobileNavigation } from "@/components/MobileNavigation";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,19 +22,20 @@ export default function RootLayout({
   return (
     <html lang="pt-PT" suppressHydrationWarning>
       <body className={inter.className}>
-        <LanguageProvider>
-          <AuthProvider>
-            <div className="min-h-screen bg-gray-50">
+        <AuthProvider>
+          <LanguageProvider>
+            <div className="grid min-h-screen w-full md:grid-cols-[220px_1fr] lg:grid-cols-[280px_1fr]">
               <Sidebar />
-              <div className="lg:ml-[280px]">
+              <div className="flex flex-col">
                 <Header />
-                <main className="p-4 sm:p-6 lg:p-8">
+                <main className="flex flex-1 flex-col gap-4 p-4 pb-20 md:pb-4 lg:gap-6 lg:p-6">
                   {children}
                 </main>
               </div>
             </div>
-          </AuthProvider>
-        </LanguageProvider>
+            <MobileNavigation />
+          </LanguageProvider>
+        </AuthProvider>
       </body>
     </html>
   );

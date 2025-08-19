@@ -1,80 +1,103 @@
 "use client"
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-import { TrendingUp, TrendingDown, DollarSign, CreditCard, Target, Calendar } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, CreditCard, Target, PiggyBank } from 'lucide-react';
 
-// Dados simulados - em produção viriam da API
-const kpis = [
-  {
-    title: 'Receita Mensal',
-    value: '€3,200',
-    change: '+4.2%',
-    trend: 'up',
-    icon: DollarSign,
-    description: 'vs mês anterior'
-  },
-  {
-    title: 'Gastos Mensais',
-    value: '€2,450',
-    change: '-8.1%',
-    trend: 'down',
-    icon: CreditCard,
-    description: 'vs mês anterior'
-  },
-  {
-    title: 'Taxa de Poupança',
-    value: '23.4%',
-    change: '+2.1%',
-    trend: 'up',
-    icon: Target,
-    description: 'do rendimento'
-  },
-  {
-    title: 'Dias até Próxima Meta',
-    value: '127',
-    change: '-5 dias',
-    trend: 'down',
-    icon: Calendar,
-    description: 'viagem para o Brasil'
-  }
-];
+type Kpis = {
+  totalBalance: number;
+  totalBalanceChange: number;
+  monthlyIncome: number;
+  monthlyIncomeChange: number;
+  monthlyExpenses: number;
+  monthlyExpensesChange: number;
+  savingsRate: number;
+  savingsRateChange: number;
+}
 
 export function FinancialKPIs() {
   const { t } = useLanguage();
+  const [kpis, setKpis] = useState<Kpis | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await fetch('/api/dashboard?type=financial-kpis')
+        if (!res.ok) throw new Error('failed')
+        const j = await res.json()
+        if (!cancelled) setKpis(j.kpis)
+      } catch (_) {
+        if (!cancelled) setKpis(null)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const items = [
+    {
+      title: t('dashboard.netWorth'),
+      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.totalBalance) : '—',
+      change: kpis ? `${kpis.totalBalanceChange.toFixed(1)}%` : '—',
+      positive: (kpis?.totalBalanceChange || 0) >= 0,
+      icon: PiggyBank,
+      desc: t('dashboard.vsLastMonth')
+    },
+    {
+      title: t('dashboard.income'),
+      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.monthlyIncome) : '—',
+      change: kpis ? `${kpis.monthlyIncomeChange.toFixed(1)}%` : '—',
+      positive: (kpis?.monthlyIncomeChange || 0) >= 0,
+      icon: DollarSign,
+      desc: t('dashboard.vsLastMonth')
+    },
+    {
+      title: t('dashboard.expenses'),
+      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.monthlyExpenses) : '—',
+      change: kpis ? `${kpis.monthlyExpensesChange.toFixed(1)}%` : '—',
+      positive: (kpis?.monthlyExpensesChange || 0) < 0 ? true : false,
+      icon: CreditCard,
+      desc: t('dashboard.vsLastMonth')
+    },
+    {
+      title: t('dashboard.savingsRate'),
+      value: kpis ? `${kpis.savingsRate.toFixed(1)}%` : '—',
+      change: kpis ? `${kpis.savingsRateChange.toFixed(1)}%` : '—',
+      positive: (kpis?.savingsRateChange || 0) >= 0,
+      icon: Target,
+      desc: t('dashboard.vsLastMonth')
+    }
+  ]
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-      {kpis.map((kpi, index) => {
-        const Icon = kpi.icon;
-        const isPositive = kpi.trend === 'up';
-        const TrendIcon = isPositive ? TrendingUp : TrendingDown;
-        
+      {items.map((it, idx) => {
+        const Icon = it.icon
+        const TrendIcon = it.positive ? TrendingUp : TrendingDown
         return (
-          <Card key={index}>
+          <Card key={idx}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                {kpi.title}
+                {it.title}
               </CardTitle>
               <Icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{kpi.value}</div>
+              <div className="text-2xl font-bold">{loading ? '—' : it.value}</div>
               <div className="flex items-center text-xs text-muted-foreground mt-1">
-                <TrendIcon className={`h-3 w-3 mr-1 ${
-                  isPositive ? 'text-green-600' : 'text-red-600'
-                }`} />
-                <span className={`font-medium ${
-                  isPositive ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {kpi.change}
-                </span>
-                <span className="ml-1">{kpi.description}</span>
+                <TrendIcon className={`h-3 w-3 mr-1 ${it.positive ? 'text-green-600' : 'text-red-600'}`} />
+                <span className={`font-medium ${it.positive ? 'text-green-600' : 'text-red-600'}`}>{loading ? '—' : it.change}</span>
+                <span className="ml-1">{it.desc}</span>
               </div>
             </CardContent>
           </Card>
-        );
+        )
       })}
     </div>
-  );
+  )
 }
