@@ -1,12 +1,12 @@
-import { createClient } from '@/lib/supabase/client'
+import { createClient } from '@/lib/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = createClient()
+  const supabase = await createClient()
     
     // Get authenticated user
-    const { data: { user }, error: userError } = await supabase.auth.getUser()
+  const { data: { user }, error: userError } = await supabase.auth.getUser()
     
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -34,6 +34,9 @@ export async function GET(request: NextRequest) {
       
       case 'financial-kpis':
         return await getFinancialKPIs(supabase, user.id)
+      
+      case 'budget-vs-actual':
+        return await getBudgetVsActual(supabase, user.id)
       
       default:
         return NextResponse.json({ error: 'Invalid type parameter' }, { status: 400 })
@@ -283,5 +286,42 @@ async function getFinancialKPIs(supabase: any, userId: string) {
   } catch (error) {
     console.error('Error in getFinancialKPIs:', error)
     return NextResponse.json({ error: 'Failed to get financial KPIs' }, { status: 500 })
+  }
+}
+
+async function getBudgetVsActual(supabase: any, userId: string) {
+  try {
+    const { data, error } = await supabase
+      .from('budget_vs_actual')
+      .select('*')
+      .eq('user_id', userId)
+      .order('usage_percentage', { ascending: false })
+
+    if (error) {
+      console.error('Error fetching budget vs actual:', error)
+      return NextResponse.json({ error: 'Failed to fetch budget vs actual' }, { status: 500 })
+    }
+
+    const formatted = (data || []).map((row: any) => {
+      const budgeted = parseFloat(row.budget_amount || 0)
+      const actual = parseFloat(row.spent_amount || 0)
+      const variance = budgeted > 0 ? ((actual - budgeted) / budgeted) * 100 : 0
+      return {
+        category: row.category_name || 'Outros',
+        budgeted,
+        actual,
+        variance,
+        color: row.category_color || '#6b7280',
+        currency: row.currency || 'EUR',
+        period: row.period || 'monthly',
+        start_date: row.start_date,
+        end_date: row.end_date,
+      }
+    })
+
+    return NextResponse.json({ data: formatted })
+  } catch (error) {
+    console.error('Error in getBudgetVsActual:', error)
+    return NextResponse.json({ error: 'Failed to get budget vs actual' }, { status: 500 })
   }
 }
