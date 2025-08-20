@@ -9,6 +9,9 @@ export async function middleware(request: NextRequest) {
     },
   })
 
+  // Mark request passed through middleware (for debugging in Vercel/CDN)
+  response.headers.set('x-mw', '1')
+
   const path = request.nextUrl.pathname
   // Skip middleware for static assets, auth routes, and API routes
   if (
@@ -19,6 +22,7 @@ export async function middleware(request: NextRequest) {
     path === '/login' ||
     path === '/register'
   ) {
+  response.headers.set('x-mw-skip', '1')
     return response
   }
 
@@ -29,6 +33,7 @@ export async function middleware(request: NextRequest) {
     if (!supabaseUrl || !supabaseAnonKey) {
       // In production (Vercel), ensure env vars are configured; fail open to avoid hard crash
       console.error('Supabase env vars missing in middleware')
+  response.headers.set('x-mw-missing-env', '1')
       return response
     }
 
@@ -40,7 +45,8 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookies) {
           cookies.forEach(({ name, value, options }) => {
-            response.cookies.set({ name, value, ...options })
+            // Use the overload that accepts (name, value, options) to avoid spreading undefined
+            response.cookies.set(name, value, options)
           })
         },
       },
@@ -55,9 +61,11 @@ export async function middleware(request: NextRequest) {
     if (!session && !path.startsWith('/login') && !path.startsWith('/register')) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
+  response.headers.set('x-mw-auth', session ? '1' : '0')
   } catch (error) {
     console.error('Middleware error:', error)
     // Soft-fail to avoid Vercel MIDDLEWARE_INVOCATION_FAILED causing 500 on all routes
+  response.headers.set('x-mw-error', '1')
     return response
   }
 
