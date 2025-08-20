@@ -40,7 +40,7 @@ export function QuickImport() {
 
             {/* Upload Button */}
             <Button asChild className="w-full bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700">
-              <Link href="/import" className="flex items-center gap-2">
+              <Link href="/pdf-import" className="flex items-center gap-2">
                 <Upload className="h-4 w-4" />
                 Importar Documento
               </Link>

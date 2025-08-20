@@ -6,17 +6,21 @@ You need to add the following environment variables in your Vercel project dashb
 
 ### 1. Supabase Configuration (REQUIRED)
 ```
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url (e.g., https://xxxxxxxxxxxxxxxxxxxx.supabase.co)
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 ```
 
+Important:
+- Do NOT set `NEXT_PUBLIC_SUPABASE_URL` to your Vercel domain. It must be your Supabase project URL ending in `.supabase.co`.
+
 ### 2. Google Cloud Credentials (OPTIONAL - if using OCR/Vision API)
+Preferred (single variable):
 ```
 GOOGLE_CREDENTIALS_BASE64=base64_encoded_service_account_json
 ```
 
-Or individual variables:
+Fallback (individual variables) if base64 is not used:
 ```
 GOOGLE_PROJECT_ID=your_project_id
 GOOGLE_CLIENT_EMAIL=your_service_account_email
@@ -65,10 +69,10 @@ When to disable:
 
 ## Encoding Google Credentials
 
-If you have a `google-credentials.json` file:
+If you have a `google-credentials.json` file and want to convert it:
 
 ```bash
-# Convert to base64
+# Convert to base64 (macOS/Linux)
 base64 -i credentials/google-credentials.json | tr -d '\n' > google-base64.txt
 
 # Copy the content of google-base64.txt and use as GOOGLE_CREDENTIALS_BASE64
@@ -89,9 +93,28 @@ After adding environment variables:
 - Verify the Supabase project is active
 
 ### Authentication Issues
+- Verify `NEXT_PUBLIC_SUPABASE_URL` points to your Supabase project (https://<project>.supabase.co), not your Vercel domain
 - Verify `SUPABASE_SERVICE_ROLE_KEY` is correct
 - Check Supabase project authentication settings
 - Ensure cookies are enabled in your browser
+
+### Supabase Auth URL Configuration (Required)
+In Supabase Dashboard → Authentication → URL Configuration:
+- Site URL: `https://finance-ai-omega-eight.vercel.app` (no trailing slash)
+- Additional Redirect URLs:
+   - `https://finance-ai-omega-eight.vercel.app/auth/callback`
+   - `http://localhost:3000/auth/callback` (for local dev)
+   - Optional for previews: `https://*.vercel.app/auth/callback`
+
+Our app initiates OAuth with `redirectTo: ${window.location.origin}/auth/callback`, and handles the code in `src/app/auth/callback/route.ts`.
+
+### Malformed redirect URL after login
+If you see a URL like:
+`https://<project>.supabase.co/finance-ai-omega-eight.vercel.app?code=...`
+
+This means the redirect host was not a full URL. Fix by:
+1) Ensuring `NEXT_PUBLIC_SUPABASE_URL` is your Supabase URL (not Vercel), and
+2) Setting Supabase Auth → Site URL to `https://finance-ai-omega-eight.vercel.app` and adding `/auth/callback` to Additional Redirect URLs.
 
 ### Google Vision API Issues
 - Verify service account has Vision API enabled

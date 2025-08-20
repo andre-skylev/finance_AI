@@ -85,7 +85,7 @@ export function FloatingActions() {
 
           {/* PDF Import */}
           <DropdownMenuItem asChild>
-            <Link href="/import" className="flex items-center cursor-pointer">
+            <Link href="/pdf-import" className="flex items-center cursor-pointer">
               <FileText className="h-4 w-4 mr-2" />
               Import PDF
             </Link>

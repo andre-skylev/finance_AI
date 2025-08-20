@@ -77,11 +77,11 @@ export function MobileNavigation() {
                 )
               }
 
-              if (item.isSpecial) {
+      if (item.isSpecial) {
                 return (
                   <Link
                     key={item.href}
-                    href="/transactions/add"
+        href="/pdf-import"
                     className="flex flex-col items-center justify-center py-2 px-1"
                   >
                     <div className="bg-blue-600 rounded-full p-1">

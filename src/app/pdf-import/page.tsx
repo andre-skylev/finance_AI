@@ -33,25 +33,14 @@ export default function PDFImportPage() {
     <ProtectedRoute>
       <div className="space-y-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="flex items-center space-x-3 mb-2">
-              <Link
-                href="/transactions"
-                className="inline-flex items-center text-gray-500 hover:text-gray-700"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                {t('pdfImport.backToTransactions')}
-              </Link>
-            </div>
-            <h1 className="text-2xl font-semibold text-gray-900 flex items-center">
-              <FileText className="h-6 w-6 mr-3" />
-              {t('pdfImport.title')}
-            </h1>
-            <p className="text-gray-600">
-              {t('pdfImport.subtitle')}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900 flex items-center">
+            <FileText className="h-6 w-6 mr-3" />
+            {t('pdfImport.title')}
+          </h1>
+          <p className="text-gray-600">
+            {t('pdfImport.subtitle')}
+          </p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

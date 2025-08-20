@@ -8,8 +8,8 @@ GOOGLE_DOCUMENT_AI_PROCESSOR_ID=your-processor-id
 # Controle de Custos
 GOOGLE_AI_DAILY_LIMIT=10  # Máximo 10 páginas por dia via Google AI
 
-# Opção 1: Usar arquivo de chave JSON
-GOOGLE_CLOUD_KEY_FILE=/path/to/service-account-key.json
+# Preferencial: usar base64 do JSON de serviço
+GOOGLE_CREDENTIALS_BASE64=base64_encoded_service_account_json
 
-# Opção 2: Usar credenciais de aplicação padrão (recomendado em produção)
-# GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account-key.json
+# Alternativa: usar caminho do arquivo (local/dev)
+# GOOGLE_APPLICATION_CREDENTIALS=./credentials/google-credentials.json

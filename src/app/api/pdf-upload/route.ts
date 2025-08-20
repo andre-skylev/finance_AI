@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import path from 'path'
+import { getGoogleCredentials } from '@/lib/google-auth'
 
 type DocAIEntity = {
   type?: string
@@ -673,12 +674,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Credenciais do Google Document AI não configuradas' }, { status: 500 })
     }
 
-    const credentialsPath = resolveCredentialsPath(getEnv('GOOGLE_APPLICATION_CREDENTIALS'))
     const apiEndpoint = location === 'eu' ? 'eu-documentai.googleapis.com' : 'us-documentai.googleapis.com'
+    // Prefer base64 credentials; fallback to GOOGLE_APPLICATION_CREDENTIALS path; otherwise rely on ADC
+    let credentials: any | null = null
+    try {
+      credentials = getGoogleCredentials()
+    } catch (_) {
+      credentials = null
+    }
+    const credentialsPath = resolveCredentialsPath(getEnv('GOOGLE_APPLICATION_CREDENTIALS'))
     const client = new v1.DocumentProcessorServiceClient({
       projectId,
-      keyFilename: credentialsPath,
       apiEndpoint,
+      ...(credentials ? { credentials: { client_email: credentials.client_email, private_key: credentials.private_key } } : {}),
+      ...(!credentials && credentialsPath ? { keyFilename: credentialsPath } : {}),
     })
 
     if (debug) {

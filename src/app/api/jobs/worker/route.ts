@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import OpenAI from 'openai'
 import path from 'path'
+import { getGoogleCredentials } from '@/lib/google-auth'
 
 export const maxDuration = 60
 
@@ -31,14 +32,24 @@ export async function POST(_req: NextRequest) {
 
     // 1) Google OCR
     const { DocumentProcessorServiceClient } = await import('@google-cloud/documentai')
+    // Prefer base64 credentials; fallback to GOOGLE_APPLICATION_CREDENTIALS path; otherwise ADC
+    let credentials: any | null = null
+    try { credentials = getGoogleCredentials() } catch (_) { credentials = null }
     const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS
-    const resolvedCredentialsPath = credentialsPath?.startsWith('./') 
+    const resolvedCredentialsPath = credentialsPath?.startsWith('./')
       ? path.resolve(process.cwd(), credentialsPath)
       : credentialsPath
     const location = process.env.GOOGLE_CLOUD_REGION || process.env.GOOGLE_CLOUD_LOCATION || 'us'
-    const clientOptions = {
+    const clientOptions: any = {
       apiEndpoint: `${location}-documentai.googleapis.com`,
-      keyFilename: resolvedCredentialsPath,
+    }
+    if (credentials) {
+      clientOptions.credentials = {
+        client_email: credentials.client_email,
+        private_key: credentials.private_key,
+      }
+    } else if (resolvedCredentialsPath) {
+      clientOptions.keyFilename = resolvedCredentialsPath
     }
     const client = new DocumentProcessorServiceClient(clientOptions)
     const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID
