@@ -650,11 +650,14 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
 
       {/* Camera modal */}
       {isCameraOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/90" onClick={stopCamera} />
-          <div className="relative bg-black rounded-2xl shadow-2xl w-full max-w-lg mx-auto overflow-hidden">
+          <div className="relative w-full h-full bg-black md:max-w-lg md:h-auto md:mx-auto md:my-6 md:rounded-2xl md:shadow-2xl overflow-hidden">
             {/* Header */}
-            <div className="absolute top-0 left-0 right-0 z-10 p-4 bg-gradient-to-b from-black/50 to-transparent">
+            <div
+              className="absolute top-0 left-0 right-0 z-10 px-4 bg-gradient-to-b from-black/50 to-transparent"
+              style={{ paddingTop: 'max(16px, env(safe-area-inset-top, 0px))', paddingBottom: 8 }}
+            >
               <div className="flex items-center justify-between text-white">
                 <h4 className="font-medium">{t('pdfUploader.scanReceipt')}</h4>
                 <button
@@ -667,29 +670,29 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
               </div>
             </div>
 
-            {/* Camera viewport */}
-            <div className="relative bg-black aspect-[3/4] flex items-center justify-center">
+            {/* Camera viewport (fills screen on mobile) */}
+            <div className="relative bg-black w-full h-full md:aspect-[3/4] md:h-auto flex items-center justify-center">
               {cameraError ? (
                 <div className="text-center text-white p-6">
                   <Camera className="h-12 w-12 mx-auto mb-3 opacity-50" />
                   <p className="text-sm">{cameraError}</p>
                   <button
                     onClick={openCamera}
-                    className="mt-3 px-4 py-2 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
+                    className="mt-3 px-4 py-2 bg.white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
                   >
                     {t('pdfUploader.tryAgain')}
                   </button>
                 </div>
               ) : (
                 <>
-                  <video 
-                    ref={videoRef} 
-                    className="w-full h-full object-cover" 
-                    playsInline 
-                    muted 
+                  <video
+                    ref={videoRef}
+                    className="w-full h-full object-cover"
+                    playsInline
+                    muted
                     autoPlay
                   />
-                  
+
                   {/* Minimalist overlay guides */}
                   <div className="absolute inset-8 border border-white/20 rounded-xl pointer-events-none">
                     <div className="absolute top-0 left-0 w-6 h-6 border-l-2 border-t-2 border-white rounded-tl"></div>
@@ -698,7 +701,7 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
                     <div className="absolute bottom-0 right-0 w-6 h-6 border-r-2 border-b-2 border-white rounded-br"></div>
                   </div>
 
-                  <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-white/60 text-center pointer-events-none">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-white/60 text-center pointer-events-none">
                     <div className="text-xs bg-black/20 px-3 py-1 rounded-full backdrop-blur-sm">
                       {t('pdfUploader.positionReceipt')}
                     </div>
@@ -708,13 +711,16 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
             </div>
 
             {/* Controls */}
-            <div className="absolute bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-black/70 to-transparent">
+            <div
+              className="absolute bottom-0 left-0 right-0 px-6 bg-gradient-to-t from-black/70 to-transparent"
+              style={{ paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))', paddingTop: 12 }}
+            >
               <div className="flex items-center justify-between text-white">
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={switchCamera}
-                    className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-all backdrop-blur-sm"
+                    className="p-3 rounded-full bg-white/10 hover:bg.white/20 transition-all backdrop-blur-sm"
                   >
                     <RotateCcw className="h-5 w-5" />
                   </button>
@@ -723,8 +729,8 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
                       type="button"
                       onClick={toggleTorch}
                       className={`p-3 rounded-full transition-all backdrop-blur-sm ${
-                        isTorchOn 
-                          ? 'bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-300' 
+                        isTorchOn
+                          ? 'bg-yellow-500/30 hover:bg-yellow-500/40 text-yellow-300'
                           : 'bg-white/10 hover:bg-white/20'
                       }`}
                       title={isTorchOn ? t('pdfUploader.flashlightOff') : t('pdfUploader.flashlightOn')}
