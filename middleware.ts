@@ -1,4 +1,3 @@
-import { createServerClient } from '@supabase/ssr'
 import { type NextRequest, NextResponse } from 'next/server'
 
 export async function middleware(request: NextRequest) {
@@ -27,15 +26,31 @@ export async function middleware(request: NextRequest) {
   }
 
   try {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  const hasAuthCookie = request.cookies.getAll().some((c) => /sb-.*-auth-token/.test(c.name))
 
     if (!supabaseUrl || !supabaseAnonKey) {
-      // In production (Vercel), ensure env vars are configured; fail open to avoid hard crash
-      console.error('Supabase env vars missing in middleware')
-  response.headers.set('x-mw-missing-env', '1')
+      // If envs missing, rely on cookie presence to gate protected routes; fail open otherwise
+      response.headers.set('x-mw-missing-env', '1')
+      if (!hasAuthCookie && !path.startsWith('/login') && !path.startsWith('/register')) {
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
       return response
     }
+
+    // If forced fallback, skip importing SSR helper and just rely on cookie gate
+    if (process.env.MW_FORCE_FALLBACK === '1') {
+      if (!hasAuthCookie && !path.startsWith('/login') && !path.startsWith('/register')) {
+        response.headers.set('x-mw-fallback', 'forced-redirect')
+        return NextResponse.redirect(new URL('/login', request.url))
+      }
+      response.headers.set('x-mw-fallback', 'forced-pass')
+      return response
+    }
+
+    // Dynamically import SSR helper to reduce Edge bundling pressure; fallback to cookie check if it fails
+    const { createServerClient } = await import('@supabase/ssr')
 
     // Use @supabase/ssr v0.5 cookies API: getAll/setAll
     const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -64,8 +79,14 @@ export async function middleware(request: NextRequest) {
   response.headers.set('x-mw-auth', session ? '1' : '0')
   } catch (error) {
     console.error('Middleware error:', error)
-    // Soft-fail to avoid Vercel MIDDLEWARE_INVOCATION_FAILED causing 500 on all routes
-  response.headers.set('x-mw-error', '1')
+    // Fallback: if SSR helper import or call failed in Edge, use cookie presence to decide
+    response.headers.set('x-mw-error', '1')
+    const hasAuthCookie = request.cookies.getAll().some((c) => /sb-.*-auth-token/.test(c.name))
+    if (!hasAuthCookie && !path.startsWith('/login') && !path.startsWith('/register')) {
+      response.headers.set('x-mw-fallback', 'redirect')
+      return NextResponse.redirect(new URL('/login', request.url))
+    }
+    response.headers.set('x-mw-fallback', 'pass')
     return response
   }
 

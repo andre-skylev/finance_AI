@@ -31,6 +31,20 @@ GOOGLE_CLIENT_CERT_URL=your_cert_url
 OPENAI_API_KEY=your_openai_api_key
 ```
 
+### 4. Middleware Fallback (Recommended for Production on Vercel)
+To avoid occasional Edge bundling issues (e.g., `__dirname is not defined`) and keep auth protection, enable the cookie-only middleware fallback:
+
+```
+MW_FORCE_FALLBACK=1
+```
+
+What it does:
+- Keeps middleware active, but skips importing `@supabase/ssr` in the Edge runtime.
+- Uses the presence of `sb-*-auth-token` cookies to allow or redirect to `/login` on protected routes.
+
+When to disable:
+- If you later confirm `@supabase/ssr` imports no longer cause issues on your Edge deployment, remove this flag to re-enable full session refresh behavior in middleware.
+
 ## How to Add Environment Variables in Vercel
 
 1. Go to your Vercel project dashboard
