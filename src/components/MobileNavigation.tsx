@@ -51,9 +51,12 @@ export function MobileNavigation() {
 
   return (
     <>
-      {/* iOS-style tab bar */}
+      {/* iOS-style tab bar with safe-area support */}
       <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
-        <div className="bg-white/95 backdrop-blur-xl border-t border-gray-200/50">
+        <div
+          className="bg-white/95 backdrop-blur-xl border-t border-gray-200/50"
+          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px))' }}
+        >
           <div className="grid grid-cols-5 items-center">
             {mainNavItems.map((item) => {
               const isActive = pathname === item.href
@@ -102,6 +105,8 @@ export function MobileNavigation() {
               )
             })}
           </div>
+          {/* Extra touch-safe spacer above the home indicator */}
+          <div className="h-2" />
         </div>
       </div>
 
@@ -112,7 +117,10 @@ export function MobileNavigation() {
           onClick={() => setShowMore(false)}
         >
           <div className="absolute inset-0 bg-black/30" />
-          <div className="absolute bottom-14 left-0 right-0 bg-white rounded-t-2xl shadow-xl">
+          <div
+            className="absolute left-0 right-0 bg-white rounded-t-2xl shadow-xl"
+            style={{ bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))' }}
+          >
             <div className="p-4">
               <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
               <div className="grid grid-cols-4 gap-4">

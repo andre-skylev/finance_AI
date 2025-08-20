@@ -44,11 +44,31 @@ CREATE INDEX IF NOT EXISTS idx_receipt_items_receipt_id ON receipt_items(receipt
 ALTER TABLE receipts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE receipt_items ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY IF NOT EXISTS "Users can manage own receipts" ON receipts
-  FOR ALL USING (auth.uid() = user_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'receipts'
+      AND policyname = 'Users can manage own receipts'
+  ) THEN
+    CREATE POLICY "Users can manage own receipts" ON public.receipts
+      FOR ALL USING (auth.uid() = user_id);
+  END IF;
+END$$;
 
-CREATE POLICY IF NOT EXISTS "Users can manage own receipt items" ON receipt_items
-  FOR ALL USING (auth.uid() = user_id);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE schemaname = 'public'
+      AND tablename = 'receipt_items'
+      AND policyname = 'Users can manage own receipt items'
+  ) THEN
+    CREATE POLICY "Users can manage own receipt items" ON public.receipt_items
+      FOR ALL USING (auth.uid() = user_id);
+  END IF;
+END$$;
 
 -- Trigger to maintain updated_at
 CREATE TRIGGER update_receipts_updated_at BEFORE UPDATE ON receipts

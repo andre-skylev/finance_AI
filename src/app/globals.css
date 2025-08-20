@@ -75,3 +75,10 @@
     color: hsl(var(--foreground));
   }
 }
+
+/* Helper: page content bottom padding to avoid overlap with mobile tab bar */
+@layer utilities {
+  .pb-safe-tabbar {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+  }
+}

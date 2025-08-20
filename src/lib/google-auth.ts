@@ -1,3 +1,4 @@
+import 'server-only'
 export function getGoogleCredentials() {
   // In production (Vercel), use environment variable
   if (process.env.GOOGLE_CREDENTIALS_BASE64) {
