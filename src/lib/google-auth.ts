@@ -1,6 +1,3 @@
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
 export function getGoogleCredentials() {
   // In production (Vercel), use environment variable
   if (process.env.GOOGLE_CREDENTIALS_BASE64) {
@@ -9,17 +6,6 @@ export function getGoogleCredentials() {
       'base64'
     ).toString('utf-8');
     return JSON.parse(credentialsJson);
-  }
-  
-  // In development, try to read from local file
-  if (process.env.NODE_ENV === 'development') {
-    try {
-      const credentialsPath = join(process.cwd(), 'credentials', 'google-credentials.json');
-      const credentialsContent = readFileSync(credentialsPath, 'utf-8');
-      return JSON.parse(credentialsContent);
-    } catch (error) {
-      console.warn('Could not read local credentials file:', error);
-    }
   }
   
   // Fallback to individual environment variables if needed
@@ -36,6 +22,12 @@ export function getGoogleCredentials() {
       auth_provider_x509_cert_url: 'https://www.googleapis.com/oauth2/v1/certs',
       client_x509_cert_url: process.env.GOOGLE_CLIENT_CERT_URL
     };
+  }
+  
+  // In development without env vars, just return null or throw error
+  if (process.env.NODE_ENV === 'development') {
+    console.warn('Google credentials not configured for development');
+    return null;
   }
   
   throw new Error('Google credentials not configured. Please set GOOGLE_CREDENTIALS_BASE64 environment variable.');
