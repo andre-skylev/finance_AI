@@ -5,12 +5,17 @@ import { usePathname } from 'next/navigation'
 import { Sidebar } from '@/components/Sidebar'
 import { Header } from '@/components/Header'
 import { MobileNavigation } from '@/components/MobileNavigation'
+import { useAuth } from '@/components/AuthProvider'
 
 export default function LayoutShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const isLogin = pathname === '/login'
+  const { user } = useAuth()
+  // Public landing page: hide chrome if not authenticated
+  // We rely on AuthProvider to set user in context; if absent, home is public
+  // But LayoutShell does not know user directly. Keep chrome on for other routes.
 
-  if (isLogin) {
+  if (isLogin || (pathname === '/' && !user)) {
     // No chrome (menus/header) on the login page
     return <>{children}</>
   }

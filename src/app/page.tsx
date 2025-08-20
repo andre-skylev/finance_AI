@@ -1,5 +1,5 @@
-import Link from 'next/link'
 import { Banknote, Bot, Goal, LineChart } from 'lucide-react'
+import { LoginCTA } from '@/components/LoginCTA'
 
 export default function HomePage() {
   return (
@@ -32,6 +32,7 @@ export default function HomePage() {
         </div>
         <p className="mt-2 text-gray-600">Defina objetivos e acompanhe com recomendações de IA.</p>
       </div>
+  <LoginCTA />
     </section>
   )
 }

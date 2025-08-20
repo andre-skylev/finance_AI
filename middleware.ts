@@ -73,7 +73,10 @@ export async function middleware(request: NextRequest) {
     } = await supabase.auth.getSession()
 
     // If no session and trying to access protected route, redirect to login
-    if (!session && !path.startsWith('/login') && !path.startsWith('/register')) {
+    if (
+      !session &&
+      !(path === '/' || path.startsWith('/login') || path.startsWith('/register'))
+    ) {
       return NextResponse.redirect(new URL('/login', request.url))
     }
   response.headers.set('x-mw-auth', session ? '1' : '0')
