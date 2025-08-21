@@ -351,8 +351,8 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        {/* Accounts Section */}
-        <div className="bg-white p-6 rounded-lg shadow">
+  {/* Accounts Section */}
+  <div id="accounts" className="bg-white p-6 rounded-lg shadow">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center space-x-3">
               <CreditCard className="h-6 w-6 text-gray-600" />

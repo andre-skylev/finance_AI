@@ -36,7 +36,8 @@ export function MobileNavigation() {
   const moreItems = [
     { href: '/goals', icon: Target, label: t('navigation.goals') },
     { href: '/credit-cards', icon: CreditCard, label: t('navigation.creditCards') },
-    { href: '/import', icon: FileText, label: t('navigation.import') },
+    // Replace legacy Import with Accounts section
+    { href: '/settings#accounts', icon: CreditCard, label: t('settings.accounts') },
     { href: '/pdf-import', icon: FileText, label: t('navigation.import') + ' PDF' },
     { href: '/categories', icon: Receipt, label: t('navigation.categories') },
     { href: '/installments', icon: ArrowLeftRight, label: t('navigation.installments') },
@@ -95,6 +96,7 @@ export function MobileNavigation() {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={() => setShowMore(false)}
                   className="flex flex-col items-center justify-center py-2 px-1"
                 >
                   <Icon className={`h-6 w-6 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />

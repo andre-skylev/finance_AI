@@ -69,8 +69,16 @@ export default function PDFImportPage() {
             </div>
           </div>
 
-          {/* Right: Card recognition */}
+          {/* Right: Card recognition and guidance */}
           <div className="space-y-6">
+            {/* Simple guidance box when nothing extracted yet */}
+            {!lastImport && (
+              <div className="bg-white p-6 rounded-lg shadow border border-gray-100">
+                <h3 className="text-base font-semibold mb-1">Como funciona a importação</h3>
+                <p className="text-sm text-gray-600">Carregue um PDF (ou use a câmara) e a IA identifica as transações automaticamente. Depois selecione a conta e confirme.</p>
+              </div>
+            )}
+
             {/* Card recognition */}
             <div className="bg-white p-6 rounded-lg shadow">
               <h3 className="text-lg font-semibold mb-2">{t('pdfImport.cardRecognition')}</h3>
@@ -145,7 +153,7 @@ export default function PDFImportPage() {
                   </button>
                 </div>
               ) : (
-        <div className="text-sm text-gray-600">{t('pdfImport.noCardDetected')}</div>
+                <div className="text-sm text-gray-600">{t('pdfImport.noCardDetected')}</div>
               )}
             </div>
 

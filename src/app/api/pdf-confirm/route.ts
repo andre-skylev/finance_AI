@@ -119,7 +119,10 @@ export async function POST(request: NextRequest) {
               description: String(it.description || 'Item'),
               quantity: typeof it.quantity === 'number' ? it.quantity : null,
               unit_price: typeof it.unitPrice === 'number' ? it.unitPrice : null,
+              tax_rate: typeof it.taxRate === 'number' ? it.taxRate : null,
+              tax_amount: typeof it.taxAmount === 'number' ? it.taxAmount : null,
               total: typeof it.total === 'number' ? it.total : null,
+              sku: it.code ? String(it.code) : null,
             }))
             const { error: itemsErr } = await supabase
               .from('receipt_items')

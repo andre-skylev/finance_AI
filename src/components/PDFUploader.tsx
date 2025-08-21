@@ -25,7 +25,7 @@ interface ExtractedData {
     subtotal?: number
     tax?: number
     total?: number
-    items: Array<{ description: string; quantity?: number; unitPrice?: number; total?: number }>
+  items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }>
   }>
 }
 
@@ -500,17 +500,17 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
           {extractedData && (
             <div className="mt-6 space-y-6">
               {/* Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm text-gray-500">{t('pdfUploader.type')}</label>
+          <label className="block text-sm text-gray-500">{t('pdfUploader.type')}</label>
                   <p className="text-sm font-medium">{extractedData.documentType || '-'}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500">{t('pdfUploader.institution')}</label>
+          <label className="block text-sm text-gray-500">{t('pdfUploader.institution')}</label>
                   <p className="text-sm font-medium">{extractedData.institution || '-'}</p>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-500">{t('pdfUploader.period')}</label>
+          <label className="block text-sm text-gray-500">{t('pdfUploader.period')}</label>
                   <p className="text-sm font-medium">
                     {extractedData?.period?.start ? formatDate(extractedData.period.start) : '-'}
                     {' '}-{' '}
@@ -538,15 +538,15 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
 
               {/* Transactions Table */}
               <div>
-                <h4 className="text-md font-medium mb-3">{t('pdfUploader.transactionsFound')} ({extractedData.transactions.length})</h4>
+    <h4 className="text-md font-medium mb-3">{t('pdfUploader.transactionsFound')} ({extractedData.transactions.length})</h4>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200">
-                        <th className="text-left py-2 px-3">{t('pdfUploader.date')}</th>
-                        <th className="text-left py-2 px-3">{t('pdfUploader.description')}</th>
-                        <th className="text-right py-2 px-3">{t('pdfUploader.amount')}</th>
-                        <th className="text-left py-2 px-3">{t('pdfUploader.suggestedCategory')}</th>
+      <th className="text-left py-2 px-3">{t('pdfUploader.date')}</th>
+      <th className="text-left py-2 px-3">{t('pdfUploader.description')}</th>
+      <th className="text-right py-2 px-3">{t('pdfUploader.amount')}</th>
+      <th className="text-left py-2 px-3">{t('pdfUploader.suggestedCategory')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -601,8 +601,10 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
                           <thead>
                             <tr className="border-b border-gray-200">
                               <th className="text-left py-2 px-3">{t('pdfUploader.item')}</th>
+                              <th className="text-left py-2 px-3">{t('pdfUploader.code')}</th>
                               <th className="text-right py-2 px-3">{t('pdfUploader.quantity')}</th>
                               <th className="text-right py-2 px-3">{t('pdfUploader.unitPrice')}</th>
+                              <th className="text-right py-2 px-3">{t('pdfUploader.taxPercent')}</th>
                               <th className="text-right py-2 px-3">{t('pdfUploader.total')}</th>
                             </tr>
                           </thead>
@@ -610,8 +612,10 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
                             {r.items.map((it, i) => (
                               <tr key={i} className="border-b border-gray-100">
                                 <td className="py-2 px-3">{it.description}</td>
+                                <td className="py-2 px-3">{it.code || '-'}</td>
                                 <td className="py-2 px-3 text-right">{typeof it.quantity === 'number' ? it.quantity : '-'}</td>
                                 <td className="py-2 px-3 text-right">{typeof it.unitPrice === 'number' ? formatCurrency(it.unitPrice) : '-'}</td>
+                                <td className="py-2 px-3 text-right">{typeof it.taxRate === 'number' ? `${it.taxRate}%` : '-'}</td>
                                 <td className="py-2 px-3 text-right font-medium">{typeof it.total === 'number' ? formatCurrency(it.total) : '-'}</td>
                               </tr>
                             ))}

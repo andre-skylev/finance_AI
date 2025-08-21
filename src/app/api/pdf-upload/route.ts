@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import path from 'path'
 import { getGoogleCredentials } from '@/lib/google-auth'
+import OpenAI from 'openai'
 
 type DocAIEntity = {
   type?: string
@@ -489,6 +490,17 @@ function extractReceiptFromTables(document: any) {
     return s
   }
   const normalize = (t: string) => t.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+  const parsePercent = (t?: string): number | undefined => {
+    if (!t) return undefined
+    const m = t.replace(/,/g, '.').match(/(-?\d{1,3}(?:\.\d{1,2})?)\s*%/)
+    if (m) {
+      const n = Number(m[1])
+      return isFinite(n) ? n : undefined
+    }
+    // Sometimes just a number in a % column
+    const n2 = Number(t.replace(/[^0-9.\-]/g, ''))
+    return isFinite(n2) && t.trim() ? n2 : undefined
+  }
 
   let bestTable: any | undefined
   let bestScore = -1
@@ -499,8 +511,10 @@ function extractReceiptFromTables(document: any) {
       const hasQty = header.some((h: string) => /(qtd|quant|qty|quantidade)/i.test(h))
       const hasUnit = header.some((h: string) => /(preco\s*un|unit|unitario|unit price|preco unit)/i.test(h))
       const hasTotal = header.some((h: string) => /(total|valor)/i.test(h))
+      const hasCode = header.some((h: string) => /(cod|código|codigo|sku|ref|referencia|referência|item\s*id|produto\s*id)/i.test(h))
+      const hasTax = header.some((h: string) => /(iva|vat|imposto|taxa|tax)/i.test(h))
       const rows = table.bodyRows || []
-      const score = (hasDesc?1:0) + (hasQty?1:0) + (hasUnit?1:0) + (hasTotal?1:0) + Math.min(rows.length, 10)
+      const score = (hasDesc?1:0) + (hasQty?1:0) + (hasUnit?1:0) + (hasTotal?1:0) + (hasCode?0.5:0) + (hasTax?0.5:0) + Math.min(rows.length, 10)
       if (score > bestScore) { bestScore = score; bestTable = table }
     }
   }
@@ -512,8 +526,10 @@ function extractReceiptFromTables(document: any) {
   let qtyIdx = findCol(/(qtd|quant|qty|quantidade)/i)
   let unitIdx = findCol(/(preco\s*un|unit|unitario|unit price|preco unit)/i)
   let totalIdx = findCol(/(total|valor)/i)
+  let codeIdx = findCol(/(cod|código|codigo|sku|ref|referencia|referência|item\s*id|produto\s*id)/i)
+  let taxIdx = findCol(/(iva|vat|imposto|taxa|tax)/i)
 
-  const items: Array<{ description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> = []
+  const items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> = []
   for (const row of (bestTable.bodyRows || [])) {
     const cells = (row.cells || []).map((c: any) => anchorToText(c.layout?.textAnchor).replace(/\s+/g, ' ').trim())
     const get = (i: number) => (i >= 0 && i < cells.length ? cells[i] : '')
@@ -533,15 +549,32 @@ function extractReceiptFromTables(document: any) {
         if (typeof n === 'number') { if (totalIdx === -1) totalIdx = i; else if (unitIdx === -1) unitIdx = i }
       }
     }
-    const description = (get(_descIdx) || '').trim()
-    if (!description) continue
+    if (taxIdx === -1) {
+      // Find a column with a % value
+      for (let i = cells.length - 1; i >= 0; i--) {
+        const p = parsePercent(cells[i])
+        if (typeof p === 'number') { taxIdx = i; break }
+      }
+    }
+  const description = (get(_descIdx) || '').trim()
+  // Skip rows where description is missing or purely numeric
+  if (!description || !/[A-Za-zÀ-ÿ]/.test(description)) continue
+    const code = (get(codeIdx) || '').trim() || undefined
     const quantity = parseAmount(get(qtyIdx))
     const unitPrice = parseAmount(get(unitIdx))
     const total = parseAmount(get(totalIdx))
+    const taxRate = parsePercent(get(taxIdx))
+    let taxAmount: number | undefined = undefined
+    if (typeof taxRate === 'number' && typeof total === 'number') {
+      const rate = taxRate / 100
+      // If total likely includes tax, estimate tax amount conservatively
+      taxAmount = Number((total - total / (1 + rate)).toFixed(2))
+      if (!isFinite(taxAmount)) taxAmount = undefined
+    }
     // Heuristic skip: summary lines
     if (/subtotal|iva|vat|imposto|taxa|total/i.test(description)) continue
     if (description && (typeof quantity === 'number' || typeof unitPrice === 'number' || typeof total === 'number')) {
-      items.push({ description, quantity, unitPrice, total })
+      items.push({ code, description, quantity, unitPrice, total, taxRate, taxAmount })
     }
   }
 
@@ -589,7 +622,7 @@ function extractReceiptFromEntities(entities: DocAIEntity[]) {
   if (!entities?.length) return undefined
   // Collect line_item entities grouped under a potential receipt/invoice parent
   const stack = [...entities]
-  const items: Array<{ description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> = []
+  const items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> = []
   let merchant: string | undefined
   let date: string | '' = ''
   let subtotal: number | undefined
@@ -610,17 +643,217 @@ function extractReceiptFromEntities(entities: DocAIEntity[]) {
     if (e.type && /(total|amount_total)/i.test(e.type)) total = total ?? num(e)
     if (e.type && /(line_item|item)/i.test(e.type)) {
       const d = txt(pickProp(e, ['description','descricao','item','produto'])) || txt(e) || 'Item'
+      const code = txt(pickProp(e, ['code','sku','ref','referencia','referência','item_id','product_id']))
       const q = num(pickProp(e, ['quantity','qtd','quantidade']))
       const u = num(pickProp(e, ['unit_price','preco_unitario','unit']))
       const t = num(pickProp(e, ['amount','total','line_total']))
       const tr = num(pickProp(e, ['tax_rate']))
       const ta = num(pickProp(e, ['tax_amount']))
-      items.push({ description: d, quantity: q, unitPrice: u, total: t, taxRate: tr, taxAmount: ta })
+      items.push({ code: code || undefined, description: d, quantity: q, unitPrice: u, total: t, taxRate: tr, taxAmount: ta })
     }
     if (e.properties) stack.push(...e.properties)
   }
   if (!items.length) return undefined
   return { merchant, date, subtotal, tax, total, items }
+}
+
+// AI mapping: normalize Document AI line_item entities with an LLM
+async function aiMapReceipt(entities: DocAIEntity[] = [], fullText: string = ''): Promise<
+  | { merchant?: string; date?: string; subtotal?: number; tax?: number; total?: number; items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> }
+  | undefined
+> {
+  const apiKey = process.env.OPENAI_API_KEY
+  if (!apiKey) throw new Error('OPENAI_API_KEY not configured')
+  const client = new OpenAI({ apiKey })
+
+  // Gather raw line items from entities
+  const rawItems: Array<Record<string, any>> = []
+  const stack = [...entities]
+  while (stack.length) {
+    const e = stack.pop()!
+    if (!e) continue
+    if (e.type && /(line_item|item)/i.test(e.type)) {
+      const d = textOf(pickProp(e, ['description','descricao','item','produto'])) || textOf(e) || ''
+      const code = textOf(pickProp(e, ['code','sku','ref','referencia','referência','item_id','product_id']))
+      const q = numberOf(pickProp(e, ['quantity','qtd','quantidade']))
+      const u = numberOf(pickProp(e, ['unit_price','preco_unitario','unit']))
+      const t = numberOf(pickProp(e, ['amount','total','line_total']))
+      const tr = numberOf(pickProp(e, ['tax_rate']))
+      const ta = numberOf(pickProp(e, ['tax_amount']))
+      rawItems.push({ description: d, code, quantity: q, unitPrice: u, total: t, taxRate: tr, taxAmount: ta })
+    }
+    if (e.properties) stack.push(...e.properties)
+  }
+
+  // Also pass a short tail/head of the text to help identify merchant/date
+  const head = (fullText || '').split(/\r?\n/).slice(0, 25).join('\n')
+  const tail = (fullText || '').split(/\r?\n/).slice(-25).join('\n')
+
+  const system = `You are a data normalizer for retail receipts. Input is from Google Document AI entities (line_item) and raw text snippets. 
+Return a strict JSON object with fields: merchant (string|optional), date (YYYY-MM-DD|optional), subtotal (number|optional), tax (number|optional), total (number|optional), and items (array).
+Each item: { code?: string, description: string, quantity?: number, unitPrice?: number, total?: number, taxRate?: number, taxAmount?: number }.
+Rules: 
+- Merge duplicated split lines; ignore summary rows like subtotal/total/iva/vat.
+- Prefer totals when available; compute nothing if uncertain.
+- Date should be a single receipt date. If absent, omit.
+- Keep currency-agnostic numbers (dot or comma handled upstream).`
+
+  const user = JSON.stringify({ rawItems, textHead: head, textTail: tail })
+  const completion = await client.chat.completions.create({
+    model: process.env.OPENAI_RECEIPT_MODEL || 'gpt-4o-mini',
+    response_format: { type: 'json_object' },
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: user },
+    ],
+    temperature: 0,
+  })
+  const content = completion.choices?.[0]?.message?.content || '{}'
+  try {
+    const parsed = JSON.parse(content)
+    if (parsed && Array.isArray(parsed.items)) {
+      // Light shape validation
+      parsed.items = parsed.items.filter((it: any) => it && typeof it.description === 'string' && it.description.trim())
+      return parsed
+    }
+  } catch {}
+  return undefined
+}
+
+// Helpers to assess quality of extracted receipt items
+function isPoorReceiptItems(items: Array<{ description: string; total?: number }> = []) {
+  if (!items.length) return true
+  let numericOnly = 0
+  let noTotal = 0
+  let lowTokens = 0
+  for (const it of items) {
+    const d = (it.description || '').trim()
+    const tokens = d.split(/\s+/).filter(Boolean)
+    if (!/[A-Za-zÀ-ÿ]/.test(d)) numericOnly++
+    if (typeof it.total !== 'number') noTotal++
+    if (tokens.length < 2) lowTokens++
+  }
+  const n = items.length
+  // Poor if too many numeric-only, too many without totals, or descriptions are mostly one token
+  return (numericOnly / n > 0.15) || (noTotal / n > 0.5) || (lowTokens / n > 0.6)
+}
+
+// Fallback: parse receipt items from plain text/lines
+function extractReceiptFromText(document: any) {
+  const text: string = document?.text || ''
+  if (!text) return undefined
+  const allLines = text.split(/\r?\n/).map(l => l.replace(/\s{2,}/g, ' ').trim()).filter(Boolean)
+  if (!allLines.length) return undefined
+  const items: Array<{ description: string; quantity?: number; unitPrice?: number; total?: number }> = []
+  const noise = /(rastreabilidade|visa|mastercard|troco|change|aprovado|authorized|multibanco|mbway|nif|vat|iva|imposto|subtotal|total|pagamento|payment)/i
+  const isNumericOnly = (s: string) => /^[-+]?\(?\s*\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})\s*\)?$/.test(s)
+
+  for (let i = 0; i < allLines.length; i++) {
+    const line = allLines[i]
+    if (!line || noise.test(line)) continue
+    if (isNumericOnly(line)) {
+      // Likely a dangling total following a description; if last item exists without total, attach
+      const amt = parseAmount(line)
+      if (typeof amt === 'number' && items.length && typeof items[items.length - 1].total !== 'number') {
+        items[items.length - 1].total = amt
+      }
+      continue
+    }
+    // Find numbers in the line
+    const amountRe = /[-+]?\(?\s*\d{1,3}(?:[.,\s]\d{3})*(?:[.,]\d{2})\s*\)?/g
+    const nums = Array.from(line.matchAll(amountRe)).map(m => ({ text: m[0], index: m.index ?? -1 }))
+    const numbers = nums.map(n => ({ n: parseAmount(n.text), index: n.index }))
+    const validNumbers = numbers.filter(v => typeof v.n === 'number') as Array<{ n: number; index: number }>
+    // Skip lines that are mostly codes
+    if (!validNumbers.length) {
+      // Could be a continuation/description-only line; if previous has total already, ignore; otherwise start a new item awaiting number on next line
+      const desc = line.trim()
+      if (desc.length > 3) {
+        // Lookahead numeric-only next line becomes total
+        let total: number | undefined
+        if (i + 1 < allLines.length && isNumericOnly(allLines[i + 1])) {
+          total = parseAmount(allLines[i + 1])
+          i++
+        }
+        if (desc && typeof total === 'number') items.push({ description: desc, total })
+      }
+      continue
+    }
+    // Use text before first number as description
+    const cut = nums[0]?.index ?? -1
+    const desc = cut > 1 ? line.slice(0, cut).trim() : line.replace(amountRe, '').trim()
+    if (!desc || desc.length < 3) continue
+    let quantity: number | undefined
+    let unitPrice: number | undefined
+    let total: number | undefined
+    if (validNumbers.length === 1) {
+      total = validNumbers[0].n
+    } else if (validNumbers.length >= 2) {
+      // Heuristic: two numbers -> unit price then total
+      unitPrice = validNumbers[validNumbers.length - 2].n
+      total = validNumbers[validNumbers.length - 1].n
+      // If there are 3 numbers and the first is near integer, treat as quantity
+      if (validNumbers.length >= 3) {
+        const q = validNumbers[0].n
+        if (Math.abs(q - Math.round(q)) < 0.001 || /\b\d+[,\.]?0{2,}\b/.test(line)) quantity = Math.round(q)
+      }
+      // If unitPrice > total, swap
+      if (typeof unitPrice === 'number' && typeof total === 'number' && unitPrice > total) {
+        const tmp = unitPrice; unitPrice = total; total = tmp
+      }
+    }
+    // If next line is numeric-only and total not set, take as total
+    if (typeof total !== 'number' && i + 1 < allLines.length && isNumericOnly(allLines[i + 1])) {
+      total = parseAmount(allLines[i + 1])
+      i++
+    }
+    if (desc && (typeof total === 'number' || typeof unitPrice === 'number')) {
+      items.push({ description: desc, quantity, unitPrice, total })
+    }
+  }
+
+  // Remove duplicates and numeric-only descriptions
+  const filtered = items.filter(it => it.description && !/^[-+]?\d/.test(it.description)).reduce((acc: any[], it) => {
+    const key = `${it.description}|${it.total ?? ''}`
+    if (!acc.find(x => `${x.description}|${x.total ?? ''}` === key)) acc.push(it)
+    return acc
+  }, [])
+
+  // Totals heuristics from tail
+  let subtotal: number | undefined
+  let tax: number | undefined
+  let total: number | undefined
+  for (const line of allLines.slice(-60)) {
+    const m = line.match(/\b(subtotal|total\s*sem\s*iva|before\s*tax)\b.*?([0-9.,]+)\b/i)
+    if (m) subtotal = subtotal ?? parseAmount(m[2]!)
+    const mt = line.match(/\b(iva|vat|taxa|imposto)\b.*?([0-9.,]+)\b/i)
+    if (mt) tax = tax ?? parseAmount(mt[2]!)
+    const tt = line.match(/\b(total)\b.*?([0-9.,]+)\b/i)
+    if (tt) total = total ?? parseAmount(tt[2]!)
+  }
+  if (typeof total !== 'number') {
+    const sum = filtered.reduce((s, it) => s + (typeof it.total === 'number' ? it.total : (typeof it.unitPrice === 'number' && typeof it.quantity === 'number' ? it.unitPrice * it.quantity : 0)), 0)
+    total = isFinite(sum) ? Number(sum.toFixed(2)) : undefined
+  }
+  if (typeof subtotal !== 'number' && typeof total === 'number' && typeof tax === 'number') subtotal = Number((total - tax).toFixed(2))
+
+  // Merchant/date heuristics
+  let merchant: string | undefined
+  let date: string | '' = ''
+  for (const line of allLines.slice(0, 20)) {
+    if (!merchant) {
+      const s = line.trim()
+      if (s.length > 3 && !/\d{2,}/.test(s) && !/subtotal|total|iva|vat|imposto/i.test(s)) merchant = s
+    }
+    if (!date) {
+      const d = parseFlexibleDate(line)
+      if (d) date = d
+    }
+    if (merchant && date) break
+  }
+
+  if (!filtered.length) return undefined
+  return { merchant, date, subtotal, tax, total, items: filtered }
 }
 
 
@@ -636,11 +869,14 @@ export async function POST(request: NextRequest) {
   const url = new URL(request.url)
   const debug = url.searchParams.get('debug') === '1' || getEnv('DOC_AI_DEBUG') === '1'
 
-    const formData = await request.formData()
+  const formData = await request.formData()
   const file = formData.get('file') as File
     const providedProcessorId = (formData.get('processorId') as string) || undefined
     const providedLocation = (formData.get('location') as string) || undefined
     const providedDocType = (formData.get('documentType') as string) || undefined // 'bank_statement' | 'credit_card'
+  const rawMode = url.searchParams.get('raw') === '1' || (formData.get('raw') === '1')
+  const entitiesOnly = url.searchParams.get('entitiesOnly') === '1' || (formData.get('entitiesOnly') === '1')
+  const aiMap = url.searchParams.get('ai') === '1' || url.searchParams.get('aiMap') === '1' || (formData.get('ai') === '1') || (formData.get('aiMap') === '1')
 
   if (!file) return NextResponse.json({ error: 'Nenhum arquivo fornecido' }, { status: 400 })
   const allowedTypes = new Set(['application/pdf','image/jpeg','image/png'])
@@ -770,11 +1006,43 @@ export async function POST(request: NextRequest) {
     const cardCandidate = extractCardInfo(entities)
 
     // Try to extract an itemized receipt (optional)
-    let receipt = extractReceiptFromEntities(entities) || extractReceiptFromTables(document)
+    const isReceipt = (providedDocType === 'receipt') || ((textOf(docTypeEntity) || '').toLowerCase().includes('receipt'))
+    let receipt = extractReceiptFromEntities(entities)
+    // Do NOT use tables for receipts to avoid hardcoded table assumptions
+    if (!receipt && !entitiesOnly && !isReceipt) {
+      receipt = extractReceiptFromTables(document)
+    }
+    // Optional AI mapping: trust Google entities (line_item) and let LLM normalize
+    let aiMapped = false
+    if ((providedDocType === 'receipt' || (textOf(docTypeEntity) || '').toLowerCase().includes('receipt')) && aiMap) {
+      try {
+        const mapped = await aiMapReceipt(entities, document.text || '')
+        if (mapped && mapped.items && mapped.items.length) {
+          receipt = mapped as any
+          aiMapped = true
+        }
+      } catch (e) {
+        if (debug) console.debug('[DocAI] AI map failed, fallback to heuristics', e)
+      }
+    }
+    // If missing or low quality, fallback to text-based extraction
+  if ((!receipt || isPoorReceiptItems(receipt.items)) && document?.text) {
+      const fromText = extractReceiptFromText(document)
+      if (fromText) receipt = fromText
+    }
+
+    // If explicitly a receipt, prioritize receipt semantics: produce a single aggregated transaction
+    if ((providedDocType === 'receipt' || (textOf(docTypeEntity) || '').toLowerCase().includes('receipt')) && receipt && typeof receipt.total === 'number') {
+      const txDate = receipt.date || new Date().toISOString().slice(0,10)
+      const desc = (receipt.merchant ? `${receipt.merchant} (recibo)` : 'Recibo')
+      // Expense by default
+      const amt = -Math.abs(Number(receipt.total))
+      transactions = [{ date: txDate, description: desc, amount: amt, suggestedCategory: 'outros' }]
+    }
 
     const data = {
-      documentType: providedDocType || (textOf(docTypeEntity) as any) || 'bank_statement',
-      institution: textOf(institutionEntity) || fallbackInstitution,
+  documentType: (providedDocType as any) || (textOf(docTypeEntity) as any) || 'bank_statement',
+  institution: (providedDocType === 'receipt' && receipt?.merchant) ? receipt.merchant : (textOf(institutionEntity) || fallbackInstitution),
       period: {
         start: textOf(periodStartEntity) || fallbackPeriod.start || '',
         end: textOf(periodEndEntity) || fallbackPeriod.end || '',
@@ -798,6 +1066,42 @@ export async function POST(request: NextRequest) {
       message: `Processado com Google Document AI em ${processingTime}ms` ,
       data,
       accounts: accounts || [],
+    }
+
+    // Optional raw payload for client-side mapping decisions
+    if (rawMode) {
+      const fullText: string = document.text || ''
+      const anchorToText = (anchor: any): string => {
+        if (!anchor?.textSegments?.length) return ''
+        let s = ''
+        for (const seg of anchor.textSegments) {
+          const start = seg.startIndex || 0
+          const end = seg.endIndex
+          if (typeof end === 'number' && end > start) s += fullText.substring(start, end)
+        }
+        return s
+      }
+      const toEntityTree = (e: DocAIEntity): any => ({
+        type: e.type,
+        text: textOf(e),
+        normalized: e.normalizedValue?.text ?? e.normalizedValue?.numberValue,
+        properties: (e.properties || []).map(toEntityTree)
+      })
+      const pages = (document.pages || []).map((pg: any) => {
+        const lines = (pg.lines || []).map((ln: any) => anchorToText(ln.layout?.textAnchor).replace(/\s+/g, ' ').trim()).filter(Boolean)
+        const tables = (pg.tables || []).map((tb: any) => {
+          const header = (tb.headerRows?.[0]?.cells || []).map((c: any) => anchorToText(c.layout?.textAnchor).replace(/\s+/g, ' ').trim())
+          const rows = (tb.bodyRows || []).map((r: any) => (r.cells || []).map((c: any) => anchorToText(c.layout?.textAnchor).replace(/\s+/g, ' ').trim()))
+          return { header, rows }
+        })
+        return { lines, tables }
+      })
+      responseBody.raw = {
+        pagesCount: Array.isArray((document as any).pages) ? (document as any).pages.length : 0,
+        text: document.text || '',
+        entities: (document.entities || []).map(toEntityTree),
+        pages,
+      }
     }
 
     // Opcional: salvar RAW para auditoria/debug
@@ -843,6 +1147,7 @@ export async function POST(request: NextRequest) {
             transactionsFound: transactions.length,
     samples: (transactions || []).slice(0, 3),
     receiptItems: receipt?.items?.length || 0,
+            aiMapped,
           },
           id: debugId,
         },
