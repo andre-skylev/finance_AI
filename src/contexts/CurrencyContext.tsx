@@ -6,6 +6,9 @@ type Rates = {
   date: string
   eur_to_brl: number
   brl_to_eur: number
+  fetched_at?: string | null
+  stale?: boolean
+  source?: string
 }
 
 type Currency = 'EUR' | 'BRL'
@@ -41,7 +44,14 @@ export function CurrencyProvider({ children, defaultCurrency = 'EUR' as Currency
           return
         }
         const j = await res.json()
-        if (!cancelled) setRates({ date: j.date, eur_to_brl: Number(j.eur_to_brl), brl_to_eur: Number(j.brl_to_eur) })
+        if (!cancelled) setRates({
+          date: j.date,
+          eur_to_brl: Number(j.eur_to_brl),
+          brl_to_eur: Number(j.brl_to_eur),
+          fetched_at: j.fetched_at || null,
+          stale: Boolean(j.stale),
+          source: j.source
+        })
       } catch (e) {
         console.warn('Rates load error (non-fatal)', e)
       }

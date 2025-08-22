@@ -13,10 +13,27 @@ import { Button } from "@/components/ui/button";
 import { FileUp, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 export default function DashboardPage() {
   const [switching, setSwitching] = useState(false)
+  const RateInfo = () => {
+    const { displayCurrency, rates } = useCurrency()
+    const text = useMemo(() => {
+      if (!rates) return null
+      const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
+      const when = last.toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' })
+      const rate = displayCurrency === 'EUR' ? rates.brl_to_eur : rates.eur_to_brl
+      const pair = displayCurrency === 'EUR' ? 'BRL→EUR' : 'EUR→BRL'
+      const stale = rates.stale ? ' • cache antigo' : ''
+      const src = rates.source ? ` • ${rates.source}` : ''
+      return `${pair}: ${rate.toFixed(4)} • atualizado ${when}${stale}${src}`
+    }, [rates, displayCurrency])
+    if (!text) return null
+    return (
+      <div className="text-xs text-muted-foreground text-right">{text}</div>
+    )
+  }
   const CurrencyToggle = () => {
     const { displayCurrency, setDisplayCurrency } = useCurrency()
     return (
@@ -60,7 +77,10 @@ export default function DashboardPage() {
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         )}
-        <CurrencyToggle />
+        <div className="flex flex-col gap-1">
+          <CurrencyToggle />
+          <RateInfo />
+        </div>
         {/* KPIs principais */}
         <FinancialKPIs />
         

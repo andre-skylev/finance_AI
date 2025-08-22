@@ -21,12 +21,13 @@ export async function GET(_req: NextRequest) {
       .eq('rate_date', todayStr)
       .maybeSingle()
 
-    if (!cacheErr && cached) {
+  if (!cacheErr && cached) {
       return NextResponse.json({
         date: cached.rate_date,
         eur_to_brl: Number(cached.eur_to_brl),
-        brl_to_eur: Number(cached.brl_to_eur),
-        cached: true,
+    brl_to_eur: Number(cached.brl_to_eur),
+    fetched_at: cached.fetched_at || null,
+    cached: true,
       })
     }
 
@@ -80,6 +81,7 @@ export async function GET(_req: NextRequest) {
           date: latest.rate_date,
           eur_to_brl: Number(latest.eur_to_brl),
           brl_to_eur: Number(latest.brl_to_eur),
+          fetched_at: latest.fetched_at || null,
           cached: true,
           stale: true,
         })
@@ -92,6 +94,7 @@ export async function GET(_req: NextRequest) {
           date: todayStr,
           eur_to_brl: envEUR,
           brl_to_eur: 1 / envEUR,
+          fetched_at: new Date().toISOString(),
           cached: false,
           stale: true,
           source: 'env'
@@ -118,6 +121,7 @@ export async function GET(_req: NextRequest) {
       date: todayStr,
       eur_to_brl,
       brl_to_eur,
+      fetched_at: new Date().toISOString(),
       cached: false,
     })
   } catch (e) {
