@@ -4,7 +4,7 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useAuth } from '@/components/AuthProvider'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Eye, EyeOff, FileText, Plus, Pencil } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Plus, Pencil, Trash } from 'lucide-react'
 import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -306,31 +306,76 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                     <td className="py-2 px-3">{new Date(m.transaction_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US')}</td>
                     <td className="py-2 px-3">{m.description || '-'}
                     </td>
-                    <td className={`py-2 px-3 text-right font-medium ${m.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                      {formatCurrency(Math.abs(m.amount), account?.currency || m.currency)}
-                    </td>
+                    {(() => {
+                      const signed = m.type === 'expense' ? -Math.abs(Number(m.amount)) : Math.abs(Number(m.amount))
+                      return (
+                        <td className={`py-2 px-3 text-right font-medium ${signed >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatCurrency(signed, account?.currency || m.currency)}
+                        </td>
+                      )
+                    })()}
                     <td className="py-2 px-3">
                       {m.category_id ? (categories.find((c: any) => c.id === m.category_id)?.name || '-') : '-'}
                     </td>
                     <td className="py-2 px-3">{m.type === 'income' ? t.income : m.type === 'expense' ? t.expense : 'Transfer'}</td>
                     <td className="py-2 px-3 text-right">
-                      {m.type !== 'transfer' && (
+                      <div className="flex items-center justify-end gap-2">
+                        {m.type !== 'transfer' && (
+                          <button
+                            onClick={() => {
+                              setEditing(m)
+                              setEditForm({
+                                type: (m.type as 'expense' | 'income') || 'expense',
+                                amount: String(Math.abs(m.amount)),
+                                date: m.transaction_date.slice(0,10),
+                                description: m.description || '',
+                                category_id: m.category_id || ''
+                              })
+                            }}
+                            className="inline-flex items-center gap-1 rounded border px-2 py-1 hover:bg-gray-50"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </button>
+                        )}
                         <button
-                          onClick={() => {
-                            setEditing(m)
-                            setEditForm({
-                              type: (m.type as 'expense' | 'income') || 'expense',
-                              amount: String(Math.abs(m.amount)),
-                              date: m.transaction_date.slice(0,10),
-                              description: m.description || '',
-                              category_id: m.category_id || ''
-                            })
+                          onClick={async () => {
+                            if (!user) return
+                            const confirmMsg = language === 'pt' ? 'Tem certeza que deseja eliminar esta movimentação?' : 'Are you sure you want to delete this movement?'
+                            if (!window.confirm(confirmMsg)) return
+                            try {
+                              const { error: delErr } = await supabase
+                                .from('transactions')
+                                .delete()
+                                .eq('id', m.id)
+                                .eq('user_id', user.id)
+                              if (delErr) throw delErr
+                              // Refresh account balance and list
+                              if (account) {
+                                const { data: accUpd } = await supabase
+                                  .from('accounts')
+                                  .select('id, name, bank_name, balance, currency')
+                                  .eq('id', account.id)
+                                  .eq('user_id', user.id)
+                                  .single()
+                                if (accUpd) setAccount(accUpd as any)
+                              }
+                              const { data: txs } = await supabase
+                                .from('transactions')
+                                .select('id, amount, currency, description, transaction_date, type, category_id')
+                                .eq('user_id', user.id)
+                                .eq('account_id', account?.id || '')
+                                .order('transaction_date', { ascending: false })
+                              setMovements((txs || []) as any)
+                            } catch (e) {
+                              console.error(e)
+                            }
                           }}
-                          className="inline-flex items-center gap-1 rounded border px-2 py-1 hover:bg-gray-50"
+                          className="inline-flex items-center gap-1 rounded border px-2 py-1 hover:bg-red-50 text-red-600 border-red-200"
+                          title={language === 'pt' ? 'Eliminar' : 'Delete'}
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Trash className="h-4 w-4" />
                         </button>
-                      )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -410,7 +455,6 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                     if (!user || !account || !editing) return
                     const newAmtAbs = parseFloat(editForm.amount || '0') || 0
                     const newSigned = editForm.type === 'expense' ? -Math.abs(newAmtAbs) : Math.abs(newAmtAbs)
-                    const delta = newSigned - editing.amount
                     try {
                       // Update transaction
                       const { error: updTxErr } = await supabase

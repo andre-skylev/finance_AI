@@ -40,7 +40,8 @@
     "continue": "Continuar",
     "submit": "Submeter",
     "update": "Atualizar",
-    "create": "Criar"
+    "create": "Criar",
+    "optional": "opcional"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -117,15 +118,16 @@
     "title": "Custos Fixos",
     "subtitle": "Gerir os seus custos recorrentes",
     "newCost": "Novo Custo Fixo",
-    "totalMonthly": "Total Mensal Estimado",
-    "activeCosts": "custos ativos",
-    "noCosts": "Nenhum custo fixo encontrado",
+  "totalMonthly": "Total Mensal Estimado",
+  "activeCosts": "custos ativos",
+  "noCosts": "Nenhum custo fixo encontrado",
     "addFirst": "Adicionar primeiro custo fixo",
     "name": "Nome",
     "amount": "Valor",
     "period": "Período",
     "startDate": "Data de Início",
-    "endDate": "Data de Fim (opcional)",
+  "endDate": "Data de Fim (opcional)",
+  "dueDay": "Dia de Vencimento",
     "nextDue": "Próximo",
     "active": "Ativo",
     "inactive": "Inativo",
@@ -135,7 +137,8 @@
     "deleteConfirm": "Tem a certeza que deseja eliminar este custo fixo?",
     "placeholders": {
       "name": "Ex: Renda da casa",
-      "amount": "0.00"
+      "amount": "0.00",
+      "dueDay": "Ex: 5"
     }
   },
   "periods": {

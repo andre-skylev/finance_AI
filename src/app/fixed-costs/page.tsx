@@ -16,6 +16,7 @@ interface FixedCost {
   billing_period: string
   start_date: string
   end_date: string | null
+  due_day?: number | null
   is_active: boolean
   next_due_date: string | null
   category: { name: string; color: string } | null
@@ -36,6 +37,7 @@ export default function FixedCostsPage() {
     billing_period: 'monthly',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
+  due_day: '' as unknown as number | ''
   })
 
   useEffect(() => {
@@ -92,11 +94,18 @@ export default function FixedCostsPage() {
       // Calculate next due date
       const startDate = new Date(formData.start_date)
       let nextDueDate = new Date(startDate)
-      
+      // If monthly and due_day provided, set to that day next month
       if (formData.billing_period === 'weekly') {
         nextDueDate.setDate(nextDueDate.getDate() + 7)
       } else if (formData.billing_period === 'monthly') {
-        nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+        if (formData.due_day) {
+          // move to next month, then set day
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+          const d = Math.min(Number(formData.due_day), 28) // clamp to 28 to avoid invalid dates
+          nextDueDate.setDate(d)
+        } else {
+          nextDueDate.setMonth(nextDueDate.getMonth() + 1)
+        }
       } else if (formData.billing_period === 'yearly') {
         nextDueDate.setFullYear(nextDueDate.getFullYear() + 1)
       }
@@ -111,6 +120,7 @@ export default function FixedCostsPage() {
           billing_period: formData.billing_period,
           start_date: formData.start_date,
           end_date: formData.end_date || null,
+          due_day: formData.due_day ? Number(formData.due_day) : null,
           next_due_date: nextDueDate.toISOString().split('T')[0],
           is_active: true,
         }])
@@ -125,6 +135,7 @@ export default function FixedCostsPage() {
         billing_period: 'monthly',
         start_date: new Date().toISOString().split('T')[0],
         end_date: '',
+        due_day: '' as unknown as number | ''
       })
       setShowForm(false)
       fetchFixedCosts()
@@ -310,13 +321,27 @@ export default function FixedCostsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {t('fixedCosts.endDate')}
+                    {t('fixedCosts.endDate')} ({t('common.optional')})
                   </label>
                   <input
                     type="date"
                     value={formData.end_date}
                     onChange={(e) => setFormData(prev => ({ ...prev, end_date: e.target.value }))}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    {t('fixedCosts.dueDay')} ({t('common.optional')})
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="31"
+                    value={formData.due_day as any || ''}
+                    onChange={(e) => setFormData(prev => ({ ...prev, due_day: e.target.value ? Number(e.target.value) : '' as any }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                    placeholder={t('fixedCosts.placeholders.dueDay')}
                   />
                 </div>
               </div>

@@ -24,10 +24,10 @@ export async function GET(request: NextRequest) {
         return await getAccountBalances(supabase, user.id)
       
       case 'expenses-by-category':
-        return await getExpensesByCategory(supabase, user.id)
+        return await getExpensesByCategory(supabase, user.id, displayCurrency)
       
       case 'cash-flow':
-        return await getCashFlow(supabase, user.id)
+        return await getCashFlow(supabase, user.id, displayCurrency)
       
       case 'recent-transactions':
         const limit = parseInt(searchParams.get('limit') || '5')
@@ -153,8 +153,9 @@ async function getAccountBalances(supabase: any, userId: string) {
   }
 }
 
-async function getExpensesByCategory(supabase: any, userId: string) {
+async function getExpensesByCategory(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
   try {
+  const rates = await getLatestRates(supabase)
     // Get current month's expenses
     const currentMonth = new Date()
     currentMonth.setDate(1)
@@ -173,11 +174,16 @@ async function getExpensesByCategory(supabase: any, userId: string) {
     }
 
     // Format data for chart
-    const formattedData = expenses?.map((expense: any) => ({
-      name: expense.category_name || 'Sem Categoria',
-      value: parseFloat(expense.total_amount),
-      color: expense.category_color || '#6b7280'
-    })) || []
+    const formattedData = expenses?.map((expense: any) => {
+      const raw = Number(expense.total_amount)
+      const fromCur: 'EUR'|'BRL' = (expense.currency || 'EUR')
+      const value = convertAmount(raw, fromCur, displayCurrency, rates)
+      return {
+        name: expense.category_name || 'Sem Categoria',
+        value,
+        color: expense.category_color || '#6b7280'
+      }
+    }) || []
 
     return NextResponse.json({ data: formattedData })
   } catch (error) {
@@ -186,8 +192,9 @@ async function getExpensesByCategory(supabase: any, userId: string) {
   }
 }
 
-async function getCashFlow(supabase: any, userId: string) {
+async function getCashFlow(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
   try {
+  const rates = await getLatestRates(supabase)
     // Get last 6 months of cash flow
     const sixMonthsAgo = new Date()
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
@@ -205,12 +212,17 @@ async function getCashFlow(supabase: any, userId: string) {
     }
 
     // Format data for chart
-    const formattedData = cashFlow?.map((month: any) => ({
-      month: new Date(month.month).toLocaleDateString('pt-PT', { month: 'short' }),
-      income: parseFloat(month.income),
-      expenses: parseFloat(month.expenses),
-      net: parseFloat(month.net)
-    })) || []
+    const formattedData = cashFlow?.map((m: any) => {
+      const income = convertAmount(Number(m.income), 'EUR', displayCurrency, rates)
+      const expenses = convertAmount(Number(m.expenses), 'EUR', displayCurrency, rates)
+      const net = convertAmount(Number(m.net), 'EUR', displayCurrency, rates)
+      return {
+        month: new Date(m.month).toLocaleDateString('pt-PT', { month: 'short' }),
+        income,
+        expenses,
+        net
+      }
+    }) || []
 
     return NextResponse.json({ data: formattedData })
   } catch (error) {
@@ -320,7 +332,8 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     const liabilities = (ccs || []).reduce((s: number, c: any) => s + convertAmount(Number(c.current_balance || 0), (c.currency || 'EUR'), displayCurrency, rates), 0)
 
     const kpis = {
-  totalBalance: assets - liabilities,
+      // As requested: primary KPI reflects income - expenses (period net)
+      totalBalance: thisMonthIncome - thisMonthExpenses,
       totalBalanceChange: 0, // TODO: Calculate based on historical data
       monthlyIncome: thisMonthIncome,
       monthlyIncomeChange: incomeGrowth,
