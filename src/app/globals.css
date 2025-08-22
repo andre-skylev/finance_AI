@@ -1,4 +1,4 @@
-/* If not using Tailwind, remove these lines and include the generated Tailwind CSS here or import from node_modules */
+/* Tailwind CSS base layers */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

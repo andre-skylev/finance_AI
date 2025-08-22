@@ -144,17 +144,14 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
         }
       ])
       if (insErr) throw insErr
-      // Persist updated account balance
-      const newBalance = (account.balance ?? 0) + signed
-      const { data: accUpd, error: updErr } = await supabase
+      // Balance will be updated by DB trigger; refetch account to reflect latest
+      const { data: accUpd } = await supabase
         .from('accounts')
-        .update({ balance: newBalance })
+        .select('id, name, bank_name, balance, currency')
         .eq('id', account.id)
         .eq('user_id', user.id)
-        .select('id, name, bank_name, balance, currency')
         .single()
-      if (updErr) throw updErr
-      setAccount(accUpd as any)
+      if (accUpd) setAccount(accUpd as any)
       // Refresh list
       const { data: txs } = await supabase
         .from('transactions')
@@ -429,16 +426,14 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                         .eq('user_id', user.id)
                       if (updTxErr) throw updTxErr
 
-                      // Update account balance by delta
-                      const { data: accUpd, error: updAccErr } = await supabase
+                      // Balance updated by DB trigger; refetch
+                      const { data: accUpd } = await supabase
                         .from('accounts')
-                        .update({ balance: (account.balance ?? 0) + delta })
+                        .select('id, name, bank_name, balance, currency')
                         .eq('id', account.id)
                         .eq('user_id', user.id)
-                        .select('id, name, bank_name, balance, currency')
                         .single()
-                      if (updAccErr) throw updAccErr
-                      setAccount(accUpd as any)
+                      if (accUpd) setAccount(accUpd as any)
 
                       // Refresh list
                       const { data: txs } = await supabase

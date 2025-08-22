@@ -54,8 +54,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Create new account
-    const { data: account, error } = await supabase
+  // Create new account (store raw balance only if zero to avoid double counting with trigger)
+  const initial = parseFloat(balance)
+  const initialProvided = !isNaN(initial) && initial !== 0
+  const { data: account, error } = await supabase
       .from('accounts')
       .insert({
         user_id: user.id,
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
         bank_name,
         account_type,
         currency,
-        balance: parseFloat(balance)
+    balance: initialProvided ? 0 : parseFloat(balance)
       })
       .select()
       .single()
@@ -75,8 +77,7 @@ export async function POST(request: NextRequest) {
 
     // If an initial balance was provided, record it as a transaction so it appears in the ledger
     try {
-      const initial = parseFloat(balance)
-      if (!isNaN(initial) && initial !== 0 && account?.id) {
+      if (initialProvided && account?.id) {
         const isIncome = initial > 0
         const signedAmount = isIncome ? Math.abs(initial) : -Math.abs(initial)
         const today = new Date().toISOString().slice(0, 10)
@@ -101,8 +102,13 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.warn('Non-blocking error while creating initial balance transaction:', e)
     }
-
-    return NextResponse.json({ account }, { status: 201 })
+    // Return latest account with accurate balance
+    const { data: fresh } = await supabase
+      .from('accounts')
+      .select('*')
+      .eq('id', account.id)
+      .single()
+    return NextResponse.json({ account: fresh || account }, { status: 201 })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
