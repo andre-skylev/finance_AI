@@ -28,14 +28,14 @@ async function checkDailyUsage(): Promise<number> {
   }
 }
 
-async function incrementDailyUsage(): Promise<void> {
+async function incrementDailyUsage(delta = 1): Promise<void> {
   try {
     const today = new Date().toISOString().split('T')[0]
     const supabase = await createClient()
     const current = await checkDailyUsage()
     const { error } = await supabase
       .from('google_ai_usage')
-      .upsert({ date: today, count: current + 1 })
+  .upsert({ date: today, count: current + (Number.isFinite(delta) ? delta : 1) })
     if (error) console.error('Erro ao incrementar uso diário:', error)
   } catch (e) {
     console.error('Erro ao incrementar uso diário:', e)
@@ -50,6 +50,32 @@ function getEnv(name: string, fallback?: string) {
 function resolveCredentialsPath(p?: string | undefined) {
   if (!p) return undefined
   return p.startsWith('./') ? path.resolve(process.cwd(), p) : p
+}
+
+type DocKind = 'receipt' | 'credit_card' | 'bank_statement'
+
+function guessDocTypeFromEntities(entities: DocAIEntity[] = []): DocKind | undefined {
+  const types = new Set(entities.map(e => (e.type || '').toLowerCase()))
+  if ([...types].some(t => /credit_card|card_limit|available_limit|last_four|billing_period/i.test(t))) return 'credit_card'
+  if ([...types].some(t => /line_item|receipt_date|merchant|supplier_name/i.test(t))) return 'receipt'
+  if ([...types].some(t => /iban|bic|account|bank_transaction|statement_line/i.test(t))) return 'bank_statement'
+  const docType = entities.find(e => /document_type/i.test(e.type || ''))
+  const val = (textOf(docType) || '').toLowerCase()
+  if (val.includes('receipt') || val.includes('recibo')) return 'receipt'
+  if (val.includes('credit')) return 'credit_card'
+  if (val.includes('statement') || val.includes('extrato') || val.includes('extrato') || val.includes('extrato bancario')) return 'bank_statement'
+  return undefined
+}
+
+function guessDocTypeFromText(text: string = ''): DocKind | undefined {
+  const t = (text || '').toLowerCase()
+  // Credit card signals
+  if (/fatura.*cart[aã]o|credit\s*card|limite.*dispon[ií]vel|vencimento|data\s*de\s*corte|ultima.*quatro|last\s*four/.test(t)) return 'credit_card'
+  // Bank statement signals
+  if (/iban|bic|nib|saldo|saldo\s*anterior|saldo\s*final|account\s*statement|movimentos|ag[eê]ncia|conta\s*corrente/.test(t)) return 'bank_statement'
+  // Receipt signals
+  if (/recibo|receipt|iva|vat|nif|nipc|supplier|merchant|total\s*\:?\s*[0-9]/.test(t)) return 'receipt'
+  return undefined
 }
 
 function pickProp(entity: DocAIEntity | undefined, names: string[]): DocAIEntity | undefined {
@@ -657,6 +683,63 @@ function extractReceiptFromEntities(entities: DocAIEntity[]) {
   return { merchant, date, subtotal, tax, total, items }
 }
 
+// Build a dynamic table for receipts by recognizing headers, without hardcoding a schema
+function buildDynamicReceiptTable(document: any): { headers: string[]; rows: string[][]; columnSemantics: { description?: number; quantity?: number; unitPrice?: number; total?: number; code?: number; tax?: number } } | undefined {
+  if (!document?.pages) return undefined
+  const fullText: string = document.text || ''
+  const anchorToText = (anchor: any): string => {
+    if (!anchor?.textSegments?.length) return ''
+    let s = ''
+    for (const seg of anchor.textSegments) {
+      const start = seg.startIndex || 0
+      const end = seg.endIndex
+      if (typeof end === 'number' && end > start) s += fullText.substring(start, end)
+    }
+    return s
+  }
+  const normalize = (t: string) => t.toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+
+  let bestTable: any | undefined
+  let bestScore = -1
+  let headerTextsRaw: string[] = []
+  let headerNorm: string[] = []
+  for (const page of document.pages) {
+    for (const table of (page.tables || [])) {
+      const headerRaw = (table.headerRows?.[0]?.cells || []).map((c: any) => (anchorToText(c.layout?.textAnchor) || '').trim())
+      const header = headerRaw.map((h: string) => normalize(h))
+      const hasDesc = header.some((h: string) => /(descri|descricao|description|produto|item)/i.test(h))
+      const hasQty = header.some((h: string) => /(qtd|quant|qty|quantidade)/i.test(h))
+      const hasUnit = header.some((h: string) => /(preco\s*un|unit|unitario|unit price|preco unit)/i.test(h))
+      const hasTotal = header.some((h: string) => /(total|valor)/i.test(h))
+      const hasCode = header.some((h: string) => /(cod|código|codigo|sku|ref|referencia|referência|item\s*id|produto\s*id)/i.test(h))
+      const hasTax = header.some((h: string) => /(iva|vat|imposto|taxa|tax)/i.test(h))
+      const rows = table.bodyRows || []
+      const score = (hasDesc?2:0) + (hasQty?1:0) + (hasUnit?1:0) + (hasTotal?2:0) + (hasCode?1:0) + (hasTax?1:0) + Math.min(rows.length, 10)
+      if (score > bestScore) { bestScore = score; bestTable = table; headerTextsRaw = headerRaw; headerNorm = header }
+    }
+  }
+  if (!bestTable) return undefined
+
+  const findCol = (re: RegExp) => headerNorm.findIndex((t: string) => re.test(t))
+  const columnSemantics: { [k: string]: number | undefined } = {
+    description: findCol(/(descri|descricao|description|produto|item)/i),
+    quantity: findCol(/(qtd|quant|qty|quantidade)/i),
+    unitPrice: findCol(/(preco\s*un|unit|unitario|unit price|preco unit)/i),
+    total: findCol(/(total|valor)/i),
+    code: findCol(/(cod|código|codigo|sku|ref|referencia|referência|item\s*id|produto\s*id)/i),
+    tax: findCol(/(iva|vat|imposto|taxa|tax)/i),
+  }
+
+  const rows: string[][] = []
+  for (const row of (bestTable.bodyRows || [])) {
+    const cells = (row.cells || []).map((c: any) => anchorToText(c.layout?.textAnchor).replace(/\s+/g, ' ').trim())
+    if (cells.length > 0) rows.push(cells)
+  }
+
+  const headers = headerTextsRaw.length ? headerTextsRaw : headerNorm
+  return { headers, rows, columnSemantics: columnSemantics as any }
+}
+
 // AI mapping: normalize Document AI line_item entities with an LLM
 async function aiMapReceipt(entities: DocAIEntity[] = [], fullText: string = ''): Promise<
   | { merchant?: string; date?: string; subtotal?: number; tax?: number; total?: number; items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }> }
@@ -897,16 +980,23 @@ export async function POST(request: NextRequest) {
 
     // Seleção de processor: prioridade para o informado no form; caso contrário usar por tipo
   const RECEIPT_DEFAULT = 'd4fe80562b6b11dc'
-  const processorId = providedProcessorId
-      || (providedDocType === 'credit_card' ? getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_CARD') : undefined)
-      || (providedDocType === 'bank_statement' ? getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_BANK') : undefined)
-      || (providedDocType === 'receipt' ? (getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_RECEIPT') || RECEIPT_DEFAULT) : undefined)
-      || getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID')
+  let processorId = providedProcessorId
+  let detectedDocType: DocKind | undefined
+  const AUTO_DETECT = (url.searchParams.get('auto') === '1') || (formData.get('auto') === '1') || !providedDocType
+  const genericProcessor = getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID')
+  const bankProcessor = getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_BANK')
+  const cardProcessor = getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_CARD')
+  const receiptProcessor = getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_ID_RECEIPT') || RECEIPT_DEFAULT
+
+  // Preflight auto-detect (single pass) if not explicitly provided
+  let preflightDocument: any | null = null
 
   // opcional: versão específica do processor
   const providedProcessorVersion = (formData.get('processorVersion') as string) || getEnv('GOOGLE_DOCUMENT_AI_PROCESSOR_VERSION')
 
-    if (!projectId || !processorId) {
+  let finalProcessorId = processorId
+
+  if (!projectId) {
       return NextResponse.json({ error: 'Credenciais do Google Document AI não configuradas' }, { status: 500 })
     }
 
@@ -926,17 +1016,48 @@ export async function POST(request: NextRequest) {
       ...(!credentials && credentialsPath ? { keyFilename: credentialsPath } : {}),
     })
 
+    // Run preflight auto-detect now that client exists (when not explicitly given)
+    if (!finalProcessorId && AUTO_DETECT && genericProcessor) {
+      try {
+        const baseProcessor = `projects/${projectId}/locations/${location}/processors/${genericProcessor}`
+        const name = baseProcessor
+        const buffer = Buffer.from(await file.arrayBuffer())
+        const preReq = { name, rawDocument: { content: buffer.toString('base64'), mimeType: file.type || 'application/pdf' } }
+        const [prefRes] = await client.processDocument(preReq as any)
+        const prefDoc = (prefRes as any).document as { text?: string; entities?: DocAIEntity[] }
+        const prefEntities = prefDoc?.entities || []
+        detectedDocType = guessDocTypeFromEntities(prefEntities) || guessDocTypeFromText(prefDoc?.text || '') || (providedDocType as DocKind | undefined)
+        preflightDocument = prefDoc
+        await incrementDailyUsage(1)
+      } catch (e) {
+        if (debug) console.debug('[DocAI] Preflight auto-detect failed; continuing with fallbacks', e)
+      }
+    }
+
+    // Choose specialized processor by detected or provided type
+    const docTypeForProcessor = (detectedDocType || (providedDocType as DocKind) || 'bank_statement')
+    if (!finalProcessorId) {
+      if (docTypeForProcessor === 'credit_card') finalProcessorId = cardProcessor || genericProcessor
+      else if (docTypeForProcessor === 'bank_statement') finalProcessorId = bankProcessor || genericProcessor
+      else if (docTypeForProcessor === 'receipt') finalProcessorId = receiptProcessor || genericProcessor
+    }
+
     if (debug) {
       console.debug('[DocAI] Config', {
         hasProject: !!projectId,
         location,
-        processorId,
+        processorId: finalProcessorId,
+        detectedDocType,
         processorVersion: providedProcessorVersion || 'default',
         apiEndpoint,
       })
     }
 
-    const baseProcessor = `projects/${projectId}/locations/${location}/processors/${processorId}`
+    if (!finalProcessorId) {
+      return NextResponse.json({ error: 'Processor não configurado' }, { status: 500 })
+    }
+
+    const baseProcessor = `projects/${projectId}/locations/${location}/processors/${finalProcessorId}`
     const name = providedProcessorVersion
       ? `${baseProcessor}/processorVersions/${providedProcessorVersion}`
       : baseProcessor
@@ -990,7 +1111,7 @@ export async function POST(request: NextRequest) {
       else if (debug) console.debug('[DocAI] Fallback texto não encontrou transações')
     }
 
-    const docTypeEntity = entities.find(e => e.type?.toLowerCase().includes('document_type'))
+  const docTypeEntity = entities.find(e => e.type?.toLowerCase().includes('document_type'))
     const institutionEntity = entities.find(e => /bank|issuer|institution|institution_name/i.test(e.type || ''))
     const periodStartEntity = entities.find(e => /period_start|start_date|billing_period_start/i.test(e.type || ''))
     const periodEndEntity = entities.find(e => /period_end|end_date|billing_period_end/i.test(e.type || ''))
@@ -1006,15 +1127,20 @@ export async function POST(request: NextRequest) {
     const cardCandidate = extractCardInfo(entities)
 
     // Try to extract an itemized receipt (optional)
-    const isReceipt = (providedDocType === 'receipt') || ((textOf(docTypeEntity) || '').toLowerCase().includes('receipt'))
+  const isReceipt = (providedDocType === 'receipt') || (detectedDocType === 'receipt') || ((textOf(docTypeEntity) || '').toLowerCase().includes('receipt'))
     let receipt = extractReceiptFromEntities(entities)
     // Do NOT use tables for receipts to avoid hardcoded table assumptions
     if (!receipt && !entitiesOnly && !isReceipt) {
       receipt = extractReceiptFromTables(document)
     }
+    // Dynamic table (headers + rows) for clients that prefer building from headers
+    let receiptTable: { headers: string[]; rows: string[][]; columnSemantics: { description?: number; quantity?: number; unitPrice?: number; total?: number; code?: number; tax?: number } } | undefined
+    if (isReceipt) {
+      receiptTable = buildDynamicReceiptTable(document)
+    }
     // Optional AI mapping: trust Google entities (line_item) and let LLM normalize
     let aiMapped = false
-    if ((providedDocType === 'receipt' || (textOf(docTypeEntity) || '').toLowerCase().includes('receipt')) && aiMap) {
+  if ((isReceipt) && aiMap) {
       try {
         const mapped = await aiMapReceipt(entities, document.text || '')
         if (mapped && mapped.items && mapped.items.length) {
@@ -1032,7 +1158,7 @@ export async function POST(request: NextRequest) {
     }
 
     // If explicitly a receipt, prioritize receipt semantics: produce a single aggregated transaction
-    if ((providedDocType === 'receipt' || (textOf(docTypeEntity) || '').toLowerCase().includes('receipt')) && receipt && typeof receipt.total === 'number') {
+  if ((isReceipt) && receipt && typeof receipt.total === 'number') {
       const txDate = receipt.date || new Date().toISOString().slice(0,10)
       const desc = (receipt.merchant ? `${receipt.merchant} (recibo)` : 'Recibo')
       // Expense by default
@@ -1041,14 +1167,14 @@ export async function POST(request: NextRequest) {
     }
 
     const data = {
-  documentType: (providedDocType as any) || (textOf(docTypeEntity) as any) || 'bank_statement',
+  documentType: (detectedDocType as any) || (providedDocType as any) || (textOf(docTypeEntity) as any) || 'bank_statement',
   institution: (providedDocType === 'receipt' && receipt?.merchant) ? receipt.merchant : (textOf(institutionEntity) || fallbackInstitution),
       period: {
         start: textOf(periodStartEntity) || fallbackPeriod.start || '',
         end: textOf(periodEndEntity) || fallbackPeriod.end || '',
       },
       transactions,
-      receipts: receipt ? [receipt] : [],
+      receipts: receipt ? [{ ...receipt, table: receiptTable }] : [],
       cardCandidate,
     }
 
@@ -1114,7 +1240,7 @@ export async function POST(request: NextRequest) {
           .from('docai_debug')
           .insert({
             user_id: user.id,
-            processor_id: processorId,
+            processor_id: finalProcessorId,
             processor_version: providedProcessorVersion || 'default',
             location,
             pages: pagesCount,
@@ -1135,7 +1261,7 @@ export async function POST(request: NextRequest) {
   responseBody.debug = {
         config: {
           location,
-          processorId,
+          processorId: finalProcessorId,
           processorVersion: providedProcessorVersion || 'default',
           apiEndpoint,
         },

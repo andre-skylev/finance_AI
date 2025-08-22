@@ -13,7 +13,8 @@ import {
   FileText,
   Settings,
   LogOut,
-  Globe
+  Globe,
+  Wallet
 } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useAuth } from '@/components/AuthProvider'
@@ -28,17 +29,17 @@ export function MobileNavigation() {
   const mainNavItems = [
     { href: '/dashboard', icon: Home, label: t('navigation.dashboard') },
     { href: '/transactions', icon: ArrowLeftRight, label: t('navigation.transactions') },
-    { href: '/add', icon: PlusCircle, label: 'Add', isSpecial: true },
+    // Special action: quick import PDF
+    { href: '/add', icon: PlusCircle, label: language === 'pt' ? 'Importar' : 'Import', isSpecial: true },
     { href: '/receipts', icon: Receipt, label: t('navigation.receipts') },
-    { href: '#more', icon: MoreHorizontal, label: 'More', action: () => setShowMore(!showMore) }
+    { href: '#more', icon: MoreHorizontal, label: language === 'pt' ? 'Mais' : 'More', action: () => setShowMore(!showMore) }
   ]
 
   const moreItems = [
     { href: '/goals', icon: Target, label: t('navigation.goals') },
     { href: '/credit-cards', icon: CreditCard, label: t('navigation.creditCards') },
-    // Replace legacy Import with Accounts section
-    { href: '/settings#accounts', icon: CreditCard, label: t('settings.accounts') },
-    { href: '/pdf-import', icon: FileText, label: t('navigation.import') + ' PDF' },
+  // Accounts dedicated page
+  { href: '/accounts', icon: Wallet, label: t('settings.accounts') },
     { href: '/categories', icon: Receipt, label: t('navigation.categories') },
     { href: '/installments', icon: ArrowLeftRight, label: t('navigation.installments') },
     { href: '/fixed-costs', icon: Receipt, label: t('navigation.fixedCosts') },

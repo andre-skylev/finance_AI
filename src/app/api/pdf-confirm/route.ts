@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     // Verificar se a conta pertence ao usuário
     const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .select('id, name')
+      .select('id, name, currency')
       .eq('id', accountId)
       .eq('user_id', user.id)
       .single()
@@ -57,7 +57,8 @@ export async function POST(request: NextRequest) {
         amount: parseFloat(transaction.amount),
         description: transaction.description,
         category_id: categoryId,
-        date: transaction.date,
+        transaction_date: transaction.date,
+        currency: account?.currency || 'EUR',
         type: parseFloat(transaction.amount) >= 0 ? 'income' : 'expense',
         created_at: new Date().toISOString(),
       }

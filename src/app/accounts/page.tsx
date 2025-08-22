@@ -1,0 +1,214 @@
+"use client"
+
+import ProtectedRoute from '@/components/ProtectedRoute'
+import { useAccounts } from '@/hooks/useFinanceData'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { useEffect, useRef, useState } from 'react'
+import { Building2, Eye, EyeOff, Plus, RefreshCw, Wallet } from 'lucide-react'
+
+export default function AccountsPage() {
+  const { t } = useLanguage()
+  const { accounts, loading, error, refetch, createAccount } = useAccounts()
+  const [hideBalances, setHideBalances] = useState<boolean>(false)
+  const [isCreating, setIsCreating] = useState<boolean>(false)
+  const [createMsg, setCreateMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const nameInputRef = useRef<HTMLInputElement | null>(null)
+  const [newAccount, setNewAccount] = useState({
+    name: '',
+    bank_name: '',
+    account_type: 'checking' as 'checking' | 'savings' | 'credit' | 'investment',
+    currency: 'EUR' as 'EUR' | 'BRL',
+    balance: 0
+  })
+
+  useEffect(() => {
+    const saved = typeof window !== 'undefined' ? localStorage.getItem('hideBalances') : null
+    if (saved) setHideBalances(saved === '1')
+  }, [])
+
+  const toggleHide = () => {
+    const next = !hideBalances
+    setHideBalances(next)
+    if (typeof window !== 'undefined') localStorage.setItem('hideBalances', next ? '1' : '0')
+  }
+
+  const formatBalance = (amount: number, currency: string) => {
+    try {
+      return new Intl.NumberFormat('pt-PT', { style: 'currency', currency }).format(amount)
+    } catch {
+      return `${currency} ${amount.toFixed(2)}`
+    }
+  }
+
+  const quickCreate = async () => {
+    if (!newAccount.name.trim()) {
+      setCreateMsg({ type: 'error', text: 'Informe um nome para a conta.' })
+      nameInputRef.current?.focus()
+      return
+    }
+    try {
+      setIsCreating(true)
+      await createAccount(newAccount as any)
+      setNewAccount({ name: '', bank_name: '', account_type: 'checking', currency: 'EUR', balance: 0 })
+      setCreateMsg({ type: 'success', text: 'Conta criada com sucesso.' })
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
+  const focusCreateForm = () => {
+    setTimeout(() => {
+      nameInputRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      nameInputRef.current?.focus()
+    }, 10)
+  }
+
+  return (
+    <ProtectedRoute>
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-semibold">{t('settings.accounts') || 'Contas'}</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={toggleHide}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-gray-50"
+              title={hideBalances ? 'Mostrar saldos' : 'Ocultar saldos'}
+            >
+              {hideBalances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              <span className="hidden sm:inline">{hideBalances ? 'Mostrar' : 'Ocultar'}</span>
+            </button>
+            <button
+              onClick={() => refetch()}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-gray-50"
+            >
+              <RefreshCw className="h-4 w-4" />
+              <span className="hidden sm:inline">Atualizar</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-white p-4 rounded-lg border">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <input
+        ref={nameInputRef}
+              className="md:col-span-2 px-3 py-2 rounded-md border"
+              placeholder="Nome da Conta"
+              value={newAccount.name}
+              onChange={(e) => setNewAccount(prev => ({ ...prev, name: e.target.value }))}
+            />
+            <input
+              className="px-3 py-2 rounded-md border"
+              placeholder="Banco (opcional)"
+              value={newAccount.bank_name}
+              onChange={(e) => setNewAccount(prev => ({ ...prev, bank_name: e.target.value }))}
+            />
+            <select
+              className="px-3 py-2 rounded-md border"
+              value={newAccount.account_type}
+              onChange={(e) => setNewAccount(prev => ({ ...prev, account_type: e.target.value as any }))}
+            >
+              <option value="checking">Conta Corrente</option>
+              <option value="savings">Poupança</option>
+              <option value="credit">Cartão de Crédito</option>
+              <option value="investment">Investimento</option>
+            </select>
+            <div className="grid grid-cols-2 gap-2">
+              <select
+                className="px-3 py-2 rounded-md border"
+                value={newAccount.currency}
+                onChange={(e) => setNewAccount(prev => ({ ...prev, currency: e.target.value as any }))}
+              >
+                <option value="EUR">EUR</option>
+                <option value="BRL">BRL</option>
+              </select>
+              <input
+                className="px-3 py-2 rounded-md border"
+                type="number"
+                step="0.01"
+                placeholder="Saldo inicial"
+                value={newAccount.balance}
+                onChange={(e) => setNewAccount(prev => ({ ...prev, balance: parseFloat(e.target.value || '0') }))}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end mt-3">
+            <button
+              onClick={quickCreate}
+              disabled={isCreating || !newAccount.name.trim()}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-white hover:bg-primary/90 disabled:opacity-50"
+            >
+              {isCreating ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <Plus className="h-4 w-4" />
+              )}
+              Adicionar Conta
+            </button>
+          </div>
+          {createMsg && (
+            <div
+              className={`mt-3 text-sm rounded-md px-3 py-2 border ${
+                createMsg.type === 'success'
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-red-50 text-red-700 border-red-200'
+              }`}
+              role="status"
+              aria-live="polite"
+            >
+              {createMsg.text}
+            </div>
+          )}
+        </div>
+
+        {loading ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-28 rounded-lg bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="p-4 rounded-md bg-red-50 text-red-700 border border-red-200">{error}</div>
+        ) : accounts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center p-10 rounded-lg border bg-white">
+            <Building2 className="h-12 w-12 text-muted-foreground mb-3" />
+            <p className="text-muted-foreground mb-3">Nenhuma conta encontrada</p>
+            <button
+              onClick={focusCreateForm}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-white hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4" /> Adicionar Primeira Conta
+            </button>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {accounts.map((acc: any) => (
+              <div key={acc.id} className="rounded-lg border bg-white p-4">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <div className="text-sm text-gray-500">{acc.bank_name || 'Conta'}</div>
+                    <div className="font-medium">{acc.name}</div>
+                  </div>
+                </div>
+                <div className="mt-3 text-2xl font-semibold tracking-tight">
+                  {hideBalances ? (
+                    <span className="select-none">••••••</span>
+                  ) : (
+                    formatBalance(acc.balance, acc.currency)
+                  )}
+                </div>
+                {acc.last_update && (
+                  <div className="mt-1 text-xs text-gray-500">
+                    Atualizado {new Date(acc.last_update).toLocaleDateString('pt-PT')}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </ProtectedRoute>
+  )
+}

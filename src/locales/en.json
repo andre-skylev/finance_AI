@@ -5,15 +5,23 @@
     "transactions": "Transactions",
     "installments": "Installments",
     "creditCards": "Credit Cards",
-  "categories": "Categories",
+    "categories": "Categories",
     "goals": "Goals",
     "fixedCosts": "Fixed Costs",
     "settings": "Settings",
     "logout": "Sign Out",
     "chat": "AI Chat",
-  "language": "Language",
-  "toggleMenu": "Toggle menu",
-  "receipts": "Receipts"
+    "language": "Language",
+    "toggleMenu": "Toggle menu",
+    "receipts": "Receipts"
+  },
+  "navGroup": {
+    "overview": "Overview",
+    "accounts": "Accounts",
+    "operations": "Operations",
+    "documents": "Documents",
+    "planning": "Planning",
+    "settings": "Settings"
   },
   "common": {
     "loading": "Loading...",
@@ -52,10 +60,10 @@
     "expenses": "Expenses",
     "netBalance": "Net Balance",
     "expensesByCategory": "Expenses by Category",
-  "noData": "No data yet",
-  "noAccounts": "No accounts found",
-  "vsLastMonth": "vs last month",
-  "savingsRate": "Savings Rate",
+    "noData": "No data yet",
+    "noAccounts": "No accounts found",
+    "vsLastMonth": "vs last month",
+    "savingsRate": "Savings Rate",
     "financialGoals": "Financial Goals",
     "saved": "Saved",
     "target": "Target",
@@ -229,8 +237,7 @@
     "currency": "Currency",
     "limit": "Limit",
     "available": "Available"
-  }
-  ,
+  },
   "categoriesPage": {
     "title": "Categories",
     "subtitle": "Use default categories and create custom ones",
@@ -245,8 +252,7 @@
     "addButton": "Add",
     "delete": "Delete",
     "deleteConfirm": "Are you sure you want to delete this category?"
-  }
-  ,
+  },
   "categories": {
     "defaults": {
       "alimentacao": "Food",
@@ -337,10 +343,10 @@
     "suggestedCategory": "Suggested category",
     "receiptItems": "Receipt Items",
     "item": "Item",
-  "code": "Code",
+    "code": "Code",
     "quantity": "Quantity",
     "unitPrice": "Unit Price",
-  "taxPercent": "Tax %",
+    "taxPercent": "Tax %",
     "total": "Total",
     "useCamera": "Use Camera",
     "startingCamera": "Starting camera...",

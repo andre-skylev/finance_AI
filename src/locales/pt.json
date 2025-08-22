@@ -15,6 +15,14 @@
   "toggleMenu": "Alternar menu",
   "receipts": "Recibos"
   },
+  "navGroup": {
+    "overview": "Visão geral",
+    "accounts": "Contas",
+    "operations": "Operações",
+    "documents": "Documentos",
+    "planning": "Planejamento",
+    "settings": "Configurações"
+  },
   "common": {
     "loading": "A carregar...",
     "save": "Guardar",

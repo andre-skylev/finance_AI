@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+// Grouped navigation with clear sections
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -13,32 +14,67 @@ import {
   ListOrdered,
   FileText,
   ReceiptText,
+  Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/components/AuthProvider";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
 
-function useNavItems() {
+type NavItem = { href: string; icon: any; label: string };
+type NavGroup = { title: string; items: NavItem[] };
+
+function useNavGroups(): NavGroup[] {
   const { t } = useLanguage();
   return [
-    { href: "/dashboard", icon: LayoutDashboard, label: t("navigation.dashboard") },
-    { href: "/transactions", icon: ArrowLeftRight, label: t("navigation.transactions") },
-    { href: "/pdf-import", icon: FileText, label: t("navigation.import") },
-  { href: "/receipts", icon: ReceiptText, label: t("navigation.receipts") || 'Recibos' },
-    { href: "/credit-cards", icon: CreditCard, label: t("navigation.creditCards") },
-    { href: "/installments", icon: ListOrdered, label: t("navigation.installments") },
-    { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
-    { href: "/goals", icon: Target, label: t("navigation.goals") },
-    { href: "/fixed-costs", icon: Calendar, label: t("navigation.fixedCosts") },
-    { href: "/settings", icon: Settings, label: t("navigation.settings") },
+    {
+      title: t("navGroup.overview") || "Visão geral",
+      items: [
+        { href: "/dashboard", icon: LayoutDashboard, label: t("navigation.dashboard") },
+      ],
+    },
+    {
+      title: t("navGroup.accounts") || "Contas",
+      items: [
+        { href: "/accounts", icon: Wallet, label: t("settings.accounts") },
+        { href: "/credit-cards", icon: CreditCard, label: t("navigation.creditCards") },
+      ],
+    },
+    {
+      title: t("navGroup.operations") || "Operações",
+      items: [
+        { href: "/transactions", icon: ArrowLeftRight, label: t("navigation.transactions") },
+        { href: "/installments", icon: ListOrdered, label: t("navigation.installments") },
+        { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
+      ],
+    },
+    {
+      title: t("navGroup.documents") || "Documentos",
+      items: [
+        { href: "/pdf-import", icon: FileText, label: t("navigation.import") + " PDF" },
+        { href: "/receipts", icon: ReceiptText, label: t("navigation.receipts") || "Recibos" },
+      ],
+    },
+    {
+      title: t("navGroup.planning") || "Planejamento",
+      items: [
+        { href: "/goals", icon: Target, label: t("navigation.goals") },
+        { href: "/fixed-costs", icon: Calendar, label: t("navigation.fixedCosts") },
+      ],
+    },
+    {
+      title: t("navGroup.settings") || "Configurações",
+      items: [
+        { href: "/settings", icon: Settings, label: t("navigation.settings") },
+      ],
+    },
   ];
 }
 
 export function Sidebar() {
   const pathname = usePathname();
   const { signOut } = useAuth();
-  const navItems = useNavItems();
+  const navGroups = useNavGroups();
   const { t } = useLanguage();
 
   return (
@@ -51,18 +87,30 @@ export function Sidebar() {
           </Link>
         </div>
         <div className="flex-1">
-          <nav className="grid items-start px-2 text-sm font-medium lg:px-4">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
-                  pathname === item.href ? "bg-muted text-primary" : ""
-                }`}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
+          <nav className="px-2 text-sm font-medium lg:px-4 space-y-4">
+            {navGroups.map((group) => (
+              <div key={group.title}>
+                <div className="px-3 py-2 text-xs uppercase tracking-wide text-gray-500">
+                  {group.title}
+                </div>
+                <div className="grid items-start">
+                  {group.items.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-muted-foreground transition-all hover:text-primary ${
+                          isActive ? "bg-muted text-primary" : ""
+                        }`}
+                      >
+                        <item.icon className="h-4 w-4" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
             ))}
           </nav>
         </div>

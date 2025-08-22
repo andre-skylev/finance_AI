@@ -25,6 +25,7 @@ interface ExtractedData {
     subtotal?: number
     tax?: number
     total?: number
+  table?: { headers: string[]; rows: string[][]; columnSemantics?: { description?: number; quantity?: number; unitPrice?: number; total?: number; code?: number; tax?: number } }
   items: Array<{ code?: string; description: string; quantity?: number; unitPrice?: number; total?: number; taxRate?: number; taxAmount?: number }>
   }>
 }
@@ -40,7 +41,7 @@ interface PDFUploaderProps {
   defaultDocumentType?: 'bank_statement' | 'credit_card' | 'receipt'
 }
 
-export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploaderProps) {
+export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
   const { t } = useLanguage()
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
@@ -51,7 +52,6 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
-  const [documentType, setDocumentType] = useState<'bank_statement' | 'credit_card' | 'receipt'>(defaultDocumentType || 'bank_statement')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -63,7 +63,7 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
   const [hasTorchSupport, setHasTorchSupport] = useState(false)
   const streamRef = useRef<MediaStream | null>(null)
 
-  // No advanced options UI; processors are selected server-side based on documentType
+  // Document type is auto-detected server-side; no selection UI
 
   useEffect(() => {
     return () => {
@@ -272,7 +272,8 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
     try {
   const formData = new FormData()
       formData.append('file', file)
-      formData.append('documentType', documentType)
+      // Enable server-side auto-detection
+      formData.append('auto', '1')
   const response = await fetch('/api/pdf-upload', {
         method: 'POST',
         body: formData,
@@ -363,30 +364,7 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
       <div className="">
 
         <div className="space-y-6">
-          {/* Document Type Selection - Minimalist */}
-          <div>
-            <label className="block text-xs font-medium text-gray-500 uppercase tracking-wider mb-3">{t('pdfUploader.documentType')}</label>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              {[
-                { value: 'bank_statement', label: t('pdfUploader.bankStatement') },
-                { value: 'credit_card', label: t('pdfUploader.creditCard') },
-                { value: 'receipt', label: t('pdfUploader.receipt') }
-              ].map((type) => (
-                <button
-                  key={type.value}
-                  type="button"
-                  onClick={() => setDocumentType(type.value as any)}
-                  className={`py-3 px-4 rounded-xl border transition-all text-sm font-medium ${
-                    documentType === type.value
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-gray-200 hover:border-gray-400 bg-white text-gray-700'
-                  }`}
-                >
-                  {type.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          {/* Document type selector removed; auto-detection in API */}
 
           {/* Capture / Upload - Minimalist */}
           <div>
@@ -596,6 +574,29 @@ export default function PDFUploader({ onSuccess, defaultDocumentType }: PDFUploa
                           )}
                         </div>
                       </div>
+                      {/* Dynamic table detected from headers (raw) */}
+                      {r.table && r.table.headers?.length && r.table.rows?.length ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b border-gray-200">
+                                {r.table?.headers.map((h, i) => (
+                                  <th key={i} className={`py-2 px-3 ${i === (r.table?.columnSemantics?.total ?? -1) ? 'text-right' : 'text-left'}`}>{h || '-'}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {r.table?.rows.map((row, ri) => (
+                                <tr key={ri} className="border-b border-gray-100">
+                                  {row.map((cell, ci) => (
+                                    <td key={ci} className={`py-2 px-3 ${ci === (r.table?.columnSemantics?.total ?? -1) || ci === (r.table?.columnSemantics?.unitPrice ?? -1) ? 'text-right' : ''}`}>{cell || '-'}</td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      ) : null}
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
