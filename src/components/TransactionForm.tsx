@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { useTransactions, useAccounts, useCategories } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { Plus, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import Link from 'next/link'
 
 interface TransactionItem {
   description: string
@@ -29,12 +30,15 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
   const { createTransaction } = useTransactions()
   const { accounts } = useAccounts()
   const { categories } = useCategories()
+  const { t, language } = useLanguage() as any
   
   const [showDetails, setShowDetails] = useState(false)
   const [items, setItems] = useState<TransactionItem[]>([])
   const [subtotal, setSubtotal] = useState('')
   const [generalTaxRate, setGeneralTaxRate] = useState('') // General tax rate in percentage
   const [useItemTax, setUseItemTax] = useState(false) // Toggle for per-item tax
+  const [step, setStep] = useState<'target'|'details'>('target')
+  const [search, setSearch] = useState('')
   
   const [formData, setFormData] = useState({
     account_id: '',
@@ -45,6 +49,15 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
     transaction_date: new Date().toISOString().split('T')[0],
     type: 'expense' as 'income' | 'expense' | 'transfer'
   })
+
+  useEffect(() => {
+    if (isOpen) {
+      // Reset to step 1 when opening
+      setStep('target')
+      setSearch('')
+      setShowDetails(false)
+    }
+  }, [isOpen])
 
   const calculateTotal = () => {
     if (items.length > 0) {
@@ -143,6 +156,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
       setGeneralTaxRate('')
       setUseItemTax(false)
       setShowDetails(false)
+  setStep('target')
     } catch (error) {
       console.error('Erro ao criar transação:', error)
     }
@@ -150,13 +164,73 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
 
   const filteredCategories = categories.filter((cat: any) => cat.type === formData.type)
 
+  // Step 1: choose target account
+  const filteredAccounts = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return accounts
+    return accounts.filter((a: any) => `${a.name} ${a.bank_name || ''}`.toLowerCase().includes(q))
+  }, [search, accounts])
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Adicionar Transação</DialogTitle>
         </DialogHeader>
+        {step === 'target' ? (
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-muted-foreground mb-2">Onde ocorreu a transação? Selecione a conta.</p>
+              {accounts.length === 0 ? (
+                <div className="rounded-md border p-4 text-sm">
+                  <div className="mb-2">Nenhuma conta encontrada.</div>
+                  <Link href="/accounts" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-gray-50">
+                    Criar conta
+                  </Link>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    placeholder="Pesquisar conta..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="mb-3"
+                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {filteredAccounts.map((a: any) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => { setFormData(prev => ({ ...prev, account_id: a.id, currency: (a.currency as any) || 'EUR' })); setStep('details') }}
+                        className="text-left rounded-md border p-3 hover:bg-gray-50"
+                      >
+                        <div className="text-sm text-gray-600">{a.bank_name || 'Conta'}</div>
+                        <div className="font-medium">{a.name}</div>
+                        <div className="text-xs text-gray-500 mt-1">Moeda: {a.currency}</div>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+            <div className="flex justify-end">
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Chosen account summary */}
+          <div className="flex items-center justify-between rounded-md border p-3">
+            <div className="text-sm">
+              <div className="text-gray-600">Conta selecionada</div>
+              <div className="font-medium">{(() => {
+                const a = accounts.find((x: any) => x.id === formData.account_id)
+                return a ? `${a.name}${a.bank_name ? ' — ' + a.bank_name : ''} (${a.currency})` : formData.account_id
+              })()}</div>
+            </div>
+            <Button type="button" variant="outline" onClick={() => setStep('target')}>Trocar</Button>
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="type">Tipo</Label>
@@ -181,24 +255,6 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                 required
               />
             </div>
-          </div>
-          
-          <div className="space-y-2">
-            <Label htmlFor="account_id">Conta</Label>
-            <select
-              id="account_id"
-              value={formData.account_id}
-              onChange={(e) => setFormData(prev => ({ ...prev, account_id: e.target.value }))}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-              required
-            >
-              <option value="">Selecione uma conta</option>
-              {accounts.map((account: any) => (
-                <option key={account.id} value={account.id}>
-                  {account.name} ({account.currency})
-                </option>
-              ))}
-            </select>
           </div>
           
           <div className="space-y-2">
@@ -460,7 +516,8 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               Adicionar Transação
             </Button>
           </div>
-        </form>
+  </form>
+  )}
       </DialogContent>
     </Dialog>
   )
