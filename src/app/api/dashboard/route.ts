@@ -12,12 +12,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
-    const type = searchParams.get('type')
+  const { searchParams } = new URL(request.url)
+  const type = searchParams.get('type')
+  const displayCurrency = (searchParams.get('currency') as 'EUR' | 'BRL') || 'EUR'
 
     switch (type) {
       case 'net-worth':
-        return await getNetWorth(supabase, user.id)
+        return await getNetWorth(supabase, user.id, displayCurrency)
       
       case 'account-balances':
         return await getAccountBalances(supabase, user.id)
@@ -33,7 +34,7 @@ export async function GET(request: NextRequest) {
         return await getRecentTransactions(supabase, user.id, limit)
       
       case 'financial-kpis':
-        return await getFinancialKPIs(supabase, user.id)
+        return await getFinancialKPIs(supabase, user.id, displayCurrency)
       
       case 'budget-vs-actual':
         return await getBudgetVsActual(supabase, user.id)
@@ -47,17 +48,49 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getNetWorth(supabase: any, userId: string) {
-  try {
-    // Get net worth data
-    const { data, error } = await supabase.rpc('calculate_net_worth', {
-      user_uuid: userId
-    })
+type Rates = { eur_to_brl: number; brl_to_eur: number }
 
-    if (error) {
-      console.error('Error calculating net worth:', error)
-      return NextResponse.json({ error: 'Failed to calculate net worth' }, { status: 500 })
-    }
+async function getLatestRates(supabase: any): Promise<Rates> {
+  const { data: today } = await supabase
+    .from('exchange_rates')
+    .select('*')
+    .order('rate_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (today?.eur_to_brl && today?.brl_to_eur) {
+    return { eur_to_brl: Number(today.eur_to_brl), brl_to_eur: Number(today.brl_to_eur) }
+  }
+  const envEUR = Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL)
+  if (isFinite(envEUR) && envEUR > 0) return { eur_to_brl: envEUR, brl_to_eur: 1 / envEUR }
+  return { eur_to_brl: 1, brl_to_eur: 1 }
+}
+
+function convertAmount(amount: number, from: 'EUR'|'BRL', to: 'EUR'|'BRL', rates: Rates) {
+  if (from === to) return amount
+  if (from === 'EUR' && to === 'BRL') return amount * rates.eur_to_brl
+  if (from === 'BRL' && to === 'EUR') return amount * rates.brl_to_eur
+  return amount
+}
+
+async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
+  try {
+    const rates = await getLatestRates(supabase)
+
+    // Accounts (assets)
+    const { data: accounts } = await supabase
+      .from('account_balances_view')
+      .select('balance, currency')
+      .eq('user_id', userId)
+    const totalAssets = (accounts || []).reduce((sum: number, a: any) => sum + convertAmount(Number(a.balance || 0), (a.currency || 'EUR'), displayCurrency, rates), 0)
+
+    // Credit cards (liabilities)
+    const { data: cards } = await supabase
+      .from('credit_cards')
+      .select('current_balance, currency')
+      .eq('user_id', userId)
+    const totalLiabilities = (cards || []).reduce((sum: number, c: any) => sum + convertAmount(Number(c.current_balance || 0), (c.currency || 'EUR'), displayCurrency, rates), 0)
+
+    const netWorth = totalAssets - totalLiabilities
 
     // Get historical data (last 6 months)
     const sixMonthsAgo = new Date()
@@ -74,18 +107,24 @@ async function getNetWorth(supabase: any, userId: string) {
       console.error('Error fetching historical data:', historyError)
     }
 
-    // Calculate cumulative net worth over time
-    let runningBalance = data[0]?.net_worth || 0
-    const netWorthHistory = historicalData?.map((month: any) => {
-      runningBalance += month.net
+    // Calculate cumulative net worth over time (best-effort with conversion)
+    const convertedNets = (historicalData || []).map((m: any) => ({
+      month: m.month,
+      net: convertAmount(Number(m.net || 0), 'EUR', displayCurrency, rates),
+    }))
+    const totalPeriodNet = convertedNets.reduce((s: number, m: any) => s + m.net, 0)
+    const startBalance = netWorth - totalPeriodNet
+    let runningBalance = startBalance
+    const netWorthHistory = convertedNets.map((m: any) => {
+      runningBalance += m.net
       return {
-        month: new Date(month.month).toLocaleDateString('pt-PT', { month: 'short' }),
-        value: runningBalance
+        month: new Date(m.month).toLocaleDateString('pt-PT', { month: 'short' }),
+        value: runningBalance,
       }
-    }) || []
+    })
 
     return NextResponse.json({
-      current: data[0] || { net_worth: 0, total_assets: 0, total_liabilities: 0, currency: 'EUR' },
+      current: { net_worth: netWorth, total_assets: totalAssets, total_liabilities: totalLiabilities, currency: displayCurrency },
       history: netWorthHistory
     })
   } catch (error) {
@@ -199,8 +238,9 @@ async function getRecentTransactions(supabase: any, userId: string, limit: numbe
   }
 }
 
-async function getFinancialKPIs(supabase: any, userId: string) {
+async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
   try {
+  const rates = await getLatestRates(supabase)
     // Get current month data
     const currentMonth = new Date()
     currentMonth.setDate(1)
@@ -212,7 +252,7 @@ async function getFinancialKPIs(supabase: any, userId: string) {
     // Get this month's transactions
     const { data: thisMonthTransactions, error: thisMonthError } = await supabase
       .from('transactions')
-      .select('type, amount')
+      .select('type, amount, currency')
       .eq('user_id', userId)
       .gte('transaction_date', currentMonth.toISOString().split('T')[0])
       .lt('transaction_date', nextMonth.toISOString().split('T')[0])
@@ -227,7 +267,7 @@ async function getFinancialKPIs(supabase: any, userId: string) {
 
     const { data: lastMonthTransactions, error: lastMonthError } = await supabase
       .from('transactions')
-      .select('type, amount')
+      .select('type, amount, currency')
       .eq('user_id', userId)
       .gte('transaction_date', lastMonth.toISOString().split('T')[0])
       .lt('transaction_date', currentMonth.toISOString().split('T')[0])
@@ -239,19 +279,19 @@ async function getFinancialKPIs(supabase: any, userId: string) {
     // Calculate KPIs
     const thisMonthIncome = thisMonthTransactions
       ?.filter((t: any) => t.type === 'income')
-      .reduce((sum: number, t: any) => sum + parseFloat(t.amount), 0) || 0
+      .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     const thisMonthExpenses = thisMonthTransactions
       ?.filter((t: any) => t.type === 'expense')
-      .reduce((sum: number, t: any) => sum + parseFloat(t.amount), 0) || 0
+      .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     const lastMonthIncome = lastMonthTransactions
       ?.filter((t: any) => t.type === 'income')
-      .reduce((sum: number, t: any) => sum + parseFloat(t.amount), 0) || 0
+      .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     const lastMonthExpenses = lastMonthTransactions
       ?.filter((t: any) => t.type === 'expense')
-      .reduce((sum: number, t: any) => sum + parseFloat(t.amount), 0) || 0
+      .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     // Calculate growth rates
     const incomeGrowth = lastMonthIncome > 0 
@@ -267,12 +307,20 @@ async function getFinancialKPIs(supabase: any, userId: string) {
       : 0
 
     // Get total net worth
-    const { data: netWorthData } = await supabase.rpc('calculate_net_worth', {
-      user_uuid: userId
-    })
+    // Net worth in selected currency
+    const { data: accs } = await supabase
+      .from('account_balances_view')
+      .select('balance, currency')
+      .eq('user_id', userId)
+    const assets = (accs || []).reduce((s: number, a: any) => s + convertAmount(Number(a.balance || 0), (a.currency || 'EUR'), displayCurrency, rates), 0)
+    const { data: ccs } = await supabase
+      .from('credit_cards')
+      .select('current_balance, currency')
+      .eq('user_id', userId)
+    const liabilities = (ccs || []).reduce((s: number, c: any) => s + convertAmount(Number(c.current_balance || 0), (c.currency || 'EUR'), displayCurrency, rates), 0)
 
     const kpis = {
-      totalBalance: netWorthData?.[0]?.net_worth || 0,
+  totalBalance: assets - liabilities,
       totalBalanceChange: 0, // TODO: Calculate based on historical data
       monthlyIncome: thisMonthIncome,
       monthlyIncomeChange: incomeGrowth,

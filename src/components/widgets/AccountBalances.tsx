@@ -5,17 +5,20 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { MoreVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export function AccountBalances() {
   const { t } = useLanguage();
+  const { displayCurrency, convert } = useCurrency();
   const [accounts, setAccounts] = useState<Array<{name:string; balance:number; currency:string;}>>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=account-balances')
+        const res = await fetch(`/api/dashboard?type=account-balances&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         if (!cancelled) setAccounts(j.accounts || [])
@@ -27,7 +30,7 @@ export function AccountBalances() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [displayCurrency])
 
   return (
     <Card className="col-span-12 lg:col-span-5">
@@ -57,7 +60,9 @@ export function AccountBalances() {
                 </div>
                 <div className="text-right">
                   <p className="font-semibold">
-                    {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: account.currency || 'EUR' }).format(account.balance || 0)}
+                    {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }).format(
+                      convert(account.balance || 0, (account.currency as 'EUR'|'BRL') || 'EUR', displayCurrency)
+                    )}
                   </p>
                   <p className="text-xs text-muted-foreground">{account.currency}</p>
                 </div>

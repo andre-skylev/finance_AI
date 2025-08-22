@@ -4,10 +4,12 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 import { BarChart3 } from 'lucide-react';
 
 export function BudgetVsActual() {
   const { t } = useLanguage();
+  const { displayCurrency } = useCurrency();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -98,7 +100,7 @@ export function BudgetVsActual() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => `€${value}`}
+              tickFormatter={(value) => `${displayCurrency === 'EUR' ? '€' : 'R$'}${value}`}
             />
             <Tooltip
               contentStyle={{
@@ -111,7 +113,8 @@ export function BudgetVsActual() {
                   budgeted: t('dashboard.budgeted'),
                   actual: t('dashboard.actual')
                 };
-                return [`€${value.toLocaleString()}`, labels[name] || name];
+                const s = displayCurrency === 'EUR' ? '€' : 'R$'
+                return [`${s}${value.toLocaleString()}`, labels[name] || name];
               }}
             />
             <Bar 
@@ -147,7 +150,7 @@ export function BudgetVsActual() {
                     {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    (€{Math.abs(item.actual - item.budgeted)})
+                    ({displayCurrency === 'EUR' ? '€' : 'R$'}{Math.abs(item.actual - item.budgeted)})
                   </span>
                 </div>
               </div>

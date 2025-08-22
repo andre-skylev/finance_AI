@@ -4,17 +4,20 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export function CashFlow() {
   const { t } = useLanguage();
+  const { displayCurrency } = useCurrency();
   const [data, setData] = useState<Array<{month:string; income:number; expenses:number; net:number}>>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=cash-flow')
+        const res = await fetch(`/api/dashboard?type=cash-flow&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         if (!cancelled) setData(j.data || [])
@@ -26,7 +29,7 @@ export function CashFlow() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [displayCurrency])
 
   return (
     <Card className="col-span-12 lg:col-span-6">
@@ -57,7 +60,7 @@ export function CashFlow() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => `€${value}`}
+              tickFormatter={(value) => `${displayCurrency === 'EUR' ? '€' : 'R$'}${value}`}
             />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
@@ -72,7 +75,8 @@ export function CashFlow() {
                   expenses: t('dashboard.expenses'), 
                   net: t('dashboard.netBalance')
                 };
-                return [`€${value.toLocaleString()}`, labels[name] || name];
+                const symbol = displayCurrency === 'EUR' ? '€' : 'R$'
+                return [`${symbol}${value.toLocaleString()}`, labels[name] || name];
               }}
             />
             <Bar dataKey="income" fill="url(#incomeGradient)" radius={[4, 4, 0, 0]} />

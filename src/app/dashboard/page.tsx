@@ -1,3 +1,5 @@
+"use client"
+
 import { NetWorth } from "@/components/widgets/NetWorth";
 import { AccountBalances } from "@/components/widgets/AccountBalances";
 import { RecentTransactions } from "@/components/widgets/RecentTransactions";
@@ -8,13 +10,57 @@ import { BudgetVsActual } from "@/components/widgets/BudgetVsActual";
 import { FinancialKPIs } from "@/components/widgets/FinancialKPIs";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
-import { FileUp } from "lucide-react";
+import { FileUp, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useCurrency } from "@/contexts/CurrencyContext";
+import { useState } from "react";
 
 export default function DashboardPage() {
+  const [switching, setSwitching] = useState(false)
+  const CurrencyToggle = () => {
+    const { displayCurrency, setDisplayCurrency } = useCurrency()
+    return (
+      <div className="flex items-center justify-end">
+        <div className="inline-flex gap-2">
+          <Button
+            variant={displayCurrency === 'EUR' ? 'default' : 'outline'}
+            size="sm"
+            disabled={switching}
+            onClick={() => {
+              if (displayCurrency === 'EUR') return
+              setSwitching(true)
+              setDisplayCurrency('EUR')
+              setTimeout(() => setSwitching(false), 500)
+            }}
+          >
+            EUR
+          </Button>
+          <Button
+            variant={displayCurrency === 'BRL' ? 'default' : 'outline'}
+            size="sm"
+            disabled={switching}
+            onClick={() => {
+              if (displayCurrency === 'BRL') return
+              setSwitching(true)
+              setDisplayCurrency('BRL')
+              setTimeout(() => setSwitching(false), 500)
+            }}
+          >
+            BRL
+          </Button>
+        </div>
+      </div>
+    )
+  }
   return (
     <ProtectedRoute>
-      <div className="space-y-6">
+      <div className="space-y-6 relative">
+        {switching && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-background/50 backdrop-blur-[1px] rounded-lg">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        <CurrencyToggle />
         {/* KPIs principais */}
         <FinancialKPIs />
         

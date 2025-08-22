@@ -4,6 +4,7 @@ import { Inter } from "next/font/google";
 import { AuthProvider } from "@/components/AuthProvider";
 import LayoutShell from "@/components/LayoutShell";
 import { LanguageProvider } from "@/contexts/LanguageContext";
+import { CurrencyProvider } from "@/contexts/CurrencyContext";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -29,7 +30,9 @@ export default function RootLayout({
       <body className={inter.className}>
         <AuthProvider>
           <LanguageProvider>
-            <LayoutShell>{children}</LayoutShell>
+            <CurrencyProvider>
+              <LayoutShell>{children}</LayoutShell>
+            </CurrencyProvider>
           </LanguageProvider>
         </AuthProvider>
       </body>

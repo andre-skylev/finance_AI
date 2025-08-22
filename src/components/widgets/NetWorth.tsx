@@ -4,17 +4,20 @@ import { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 export function NetWorth() {
   const { t } = useLanguage();
+  const { displayCurrency } = useCurrency();
   const [data, setData] = useState<Array<{name:string; value:number}>>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=net-worth')
+      const res = await fetch(`/api/dashboard?type=net-worth&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         const history = (j.history || []).map((d: any) => ({ name: d.month, value: d.value }))
@@ -27,7 +30,7 @@ export function NetWorth() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+    }, [displayCurrency])
   return (
     <Card className="col-span-12 lg:col-span-7">
       <CardHeader>
@@ -46,13 +49,14 @@ export function NetWorth() {
               </linearGradient>
             </defs>
             <XAxis dataKey="name" stroke="hsl(var(--foreground))" />
-            <YAxis stroke="hsl(var(--foreground))" />
+            <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => (displayCurrency === 'EUR' ? '€' : 'R$') + v} />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--background))",
                 borderColor: "hsl(var(--border))",
               }}
+              formatter={(value: number) => [(displayCurrency === 'EUR' ? '€' : 'R$') + Number(value).toLocaleString(), t('dashboard.netWorth')]}
             />
             <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
           </AreaChart>

@@ -4,17 +4,20 @@ import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/contexts/CurrencyContext';
  
 export function ExpensesByCategory() {
   const { t } = useLanguage();
+  const { displayCurrency } = useCurrency();
   const [data, setData] = useState<Array<{name:string; value:number; color:string}>>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=expenses-by-category')
+        const res = await fetch(`/api/dashboard?type=expenses-by-category&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         if (!cancelled) setData(j.data || [])
@@ -26,7 +29,7 @@ export function ExpensesByCategory() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [displayCurrency])
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -41,7 +44,7 @@ const CustomTooltip = ({ active, payload }: any) => {
           <span className="font-medium text-sm">{data.payload.name}</span>
         </div>
         <div className="text-sm text-muted-foreground">
-          €{data.value.toLocaleString()}
+          {displayCurrency === 'EUR' ? '€' : 'R$'}{data.value.toLocaleString()}
         </div>
       </div>
     );
@@ -99,7 +102,7 @@ const CustomTooltip = ({ active, payload }: any) => {
                       <span className="text-sm font-medium truncate">{item.name}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="font-semibold">€{item.value.toLocaleString()}</span>
+                      <span className="font-semibold">{displayCurrency === 'EUR' ? '€' : 'R$'}{item.value.toLocaleString()}</span>
                     </div>
                   </div>
                   <div className="mt-1 ml-7">
@@ -125,7 +128,7 @@ const CustomTooltip = ({ active, payload }: any) => {
         <div className="mt-6 pt-4 border-t">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Total de Gastos</span>
-            <span className="text-lg font-bold">€{total.toLocaleString()}</span>
+            <span className="text-lg font-bold">{displayCurrency === 'EUR' ? '€' : 'R$'}{total.toLocaleString()}</span>
           </div>
         </div>
         </>

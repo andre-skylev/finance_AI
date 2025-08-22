@@ -1,9 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Target, PiggyBank } from 'lucide-react';
+import { useCurrency } from '@/contexts/CurrencyContext';
 
 type Kpis = {
   totalBalance: number;
@@ -18,14 +19,16 @@ type Kpis = {
 
 export function FinancialKPIs() {
   const { t } = useLanguage();
+  const { displayCurrency, convert } = useCurrency();
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    setLoading(true)
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=financial-kpis')
+        const res = await fetch(`/api/dashboard?type=financial-kpis&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         if (!cancelled) setKpis(j.kpis)
@@ -37,12 +40,13 @@ export function FinancialKPIs() {
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [displayCurrency])
 
+  const fmt = useMemo(() => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }), [displayCurrency])
   const items = [
     {
       title: t('dashboard.netWorth'),
-      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.totalBalance) : '—',
+      value: kpis ? fmt.format(kpis.totalBalance) : '—',
       change: kpis ? `${kpis.totalBalanceChange.toFixed(1)}%` : '—',
       positive: (kpis?.totalBalanceChange || 0) >= 0,
       icon: PiggyBank,
@@ -50,7 +54,7 @@ export function FinancialKPIs() {
     },
     {
       title: t('dashboard.income'),
-      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.monthlyIncome) : '—',
+      value: kpis ? fmt.format(kpis.monthlyIncome) : '—',
       change: kpis ? `${kpis.monthlyIncomeChange.toFixed(1)}%` : '—',
       positive: (kpis?.monthlyIncomeChange || 0) >= 0,
       icon: DollarSign,
@@ -58,7 +62,7 @@ export function FinancialKPIs() {
     },
     {
       title: t('dashboard.expenses'),
-      value: kpis ? new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(kpis.monthlyExpenses) : '—',
+      value: kpis ? fmt.format(kpis.monthlyExpenses) : '—',
       change: kpis ? `${kpis.monthlyExpensesChange.toFixed(1)}%` : '—',
       positive: (kpis?.monthlyExpensesChange || 0) < 0 ? true : false,
       icon: CreditCard,
