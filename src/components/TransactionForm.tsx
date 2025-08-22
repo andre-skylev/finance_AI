@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { useTransactions, useAccounts, useCategories } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { Plus, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Plus, ArrowUpRight, ArrowDownRight, ChevronDown, ChevronUp, Trash2, CreditCard, Banknote } from 'lucide-react'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/client'
 
 interface TransactionItem {
   description: string
@@ -31,6 +32,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
   const { accounts } = useAccounts()
   const { categories } = useCategories()
   const { t, language } = useLanguage() as any
+  const supabase = createClient()
   
   const [showDetails, setShowDetails] = useState(false)
   const [items, setItems] = useState<TransactionItem[]>([])
@@ -38,7 +40,9 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
   const [generalTaxRate, setGeneralTaxRate] = useState('') // General tax rate in percentage
   const [useItemTax, setUseItemTax] = useState(false) // Toggle for per-item tax
   const [step, setStep] = useState<'target'|'details'>('target')
+  const [targetType, setTargetType] = useState<'account' | 'credit_card'>('account')
   const [search, setSearch] = useState('')
+  const [creditCards, setCreditCards] = useState<any[]>([])
   
   const [formData, setFormData] = useState({
     account_id: '',
@@ -56,6 +60,17 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
       setStep('target')
       setSearch('')
       setShowDetails(false)
+      setTargetType('account')
+      // lazily load cards
+      ;(async () => {
+        try {
+          const { data, error } = await supabase
+            .from('credit_cards')
+            .select('id, card_name, bank_name, currency')
+            .order('bank_name', { ascending: true })
+          if (!error) setCreditCards(data || [])
+        } catch {}
+      })()
     }
   }, [isOpen])
 
@@ -116,33 +131,57 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
     try {
       const finalAmount = calculateTotal()
       
-      const transactionData: any = {
-        ...formData,
-        amount: finalAmount,
-        category_id: formData.category_id || undefined
-      }
-      
-      // Add metadata if we have detailed information
-      if (showDetails && (items.length > 0 || subtotal || generalTaxRate)) {
-        const taxAmount = items.length > 0 
-          ? items.reduce((sum, item) => sum + item.taxAmount, 0)
-          : (parseFloat(subtotal) || 0) * (parseFloat(generalTaxRate) || 0) / 100
-        
-        transactionData.metadata = {
-          items: items.length > 0 ? items : undefined,
-          subtotal: parseFloat(subtotal) || undefined,
-          taxRate: parseFloat(generalTaxRate) || undefined,
-          taxAmount: taxAmount || undefined,
-          hasDetails: true
+      // Branch by target type
+      if (targetType === 'account') {
+        const transactionData: any = {
+          ...formData,
+          amount: finalAmount,
+          category_id: formData.category_id || undefined
+        }
+        // Add metadata if we have detailed information
+        if (showDetails && (items.length > 0 || subtotal || generalTaxRate)) {
+          const taxAmount = items.length > 0 
+            ? items.reduce((sum, item) => sum + item.taxAmount, 0)
+            : (parseFloat(subtotal) || 0) * (parseFloat(generalTaxRate) || 0) / 100
+          
+          transactionData.metadata = {
+            items: items.length > 0 ? items : undefined,
+            subtotal: parseFloat(subtotal) || undefined,
+            taxRate: parseFloat(generalTaxRate) || undefined,
+            taxAmount: taxAmount || undefined,
+            hasDetails: true
+          }
+        }
+        await createTransaction(transactionData)
+      } else {
+        // credit card path
+        const cardId = formData.account_id.startsWith('cc:') ? formData.account_id.split(':')[1] : formData.account_id
+        const isPayment = formData.type === 'income'
+        const payload = {
+          credit_card_id: cardId,
+          transaction_date: formData.transaction_date,
+          description: formData.description,
+          amount: finalAmount,
+          currency: formData.currency,
+          transaction_type: isPayment ? 'payment' : 'purchase',
+          installments: 1,
+          installment_number: 1
+        }
+        const res = await fetch('/api/credit-card-transactions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          throw new Error(data.error || 'Failed to create credit card transaction')
         }
       }
-      
-      await createTransaction(transactionData)
       onOpenChange(false)
       if (onCreated) onCreated()
       
       // Reset form
-      setFormData({
+  setFormData({
         account_id: '',
         category_id: '',
         amount: '',
@@ -156,6 +195,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
       setGeneralTaxRate('')
       setUseItemTax(false)
       setShowDetails(false)
+  setTargetType('account')
   setStep('target')
     } catch (error) {
       console.error('Erro ao criar transação:', error)
@@ -164,12 +204,18 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
 
   const filteredCategories = categories.filter((cat: any) => cat.type === formData.type)
 
-  // Step 1: choose target account
+  // Step 1: choose target account or credit card
   const filteredAccounts = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return accounts
     return accounts.filter((a: any) => `${a.name} ${a.bank_name || ''}`.toLowerCase().includes(q))
   }, [search, accounts])
+
+  const filteredCards = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return creditCards
+    return creditCards.filter((c: any) => `${c.card_name} ${c.bank_name || ''}`.toLowerCase().includes(q))
+  }, [search, creditCards])
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -180,36 +226,72 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
         {step === 'target' ? (
           <div className="space-y-4">
             <div>
-              <p className="text-sm text-muted-foreground mb-2">Onde ocorreu a transação? Selecione a conta.</p>
-              {accounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground mb-2">Onde ocorreu a transação? Selecione a origem.</p>
+
+              {/* Tabs for target type */}
+              <div className="flex gap-2 mb-2">
+                <button
+                  type="button"
+                  onClick={() => setTargetType('account')}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md border ${targetType === 'account' ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'}`}
+                >
+                  <Banknote className="h-4 w-4" /> Conta
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTargetType('credit_card')}
+                  className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-md border ${targetType === 'credit_card' ? 'bg-gray-100' : 'bg-white hover:bg-gray-50'}`}
+                >
+                  <CreditCard className="h-4 w-4" /> Cartão
+                </button>
+              </div>
+
+              {(targetType === 'account' ? accounts.length === 0 : creditCards.length === 0) ? (
                 <div className="rounded-md border p-4 text-sm">
-                  <div className="mb-2">Nenhuma conta encontrada.</div>
-                  <Link href="/accounts" className="inline-flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-gray-50">
-                    Criar conta
+                  <div className="mb-2">{targetType === 'account' ? 'Nenhuma conta encontrada.' : 'Nenhum cartão encontrado.'}</div>
+                  <Link href={targetType === 'account' ? '/accounts' : '/credit-cards'} className="inline-flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-gray-50">
+                    {targetType === 'account' ? 'Criar conta' : 'Criar cartão'}
                   </Link>
                 </div>
               ) : (
                 <>
                   <Input
-                    placeholder="Pesquisar conta..."
+                    placeholder={targetType === 'account' ? 'Pesquisar conta...' : 'Pesquisar cartão...'}
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     className="mb-3"
                   />
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {filteredAccounts.map((a: any) => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        onClick={() => { setFormData(prev => ({ ...prev, account_id: a.id, currency: (a.currency as any) || 'EUR' })); setStep('details') }}
-                        className="text-left rounded-md border p-3 hover:bg-gray-50"
-                      >
-                        <div className="text-sm text-gray-600">{a.bank_name || 'Conta'}</div>
-                        <div className="font-medium">{a.name}</div>
-                        <div className="text-xs text-gray-500 mt-1">Moeda: {a.currency}</div>
-                      </button>
-                    ))}
-                  </div>
+                  {targetType === 'account' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {filteredAccounts.map((a: any) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => { setFormData(prev => ({ ...prev, account_id: a.id, currency: (a.currency as any) || 'EUR' })); setStep('details') }}
+                          className="text-left rounded-md border p-3 hover:bg-gray-50"
+                        >
+                          <div className="text-sm text-gray-600">{a.bank_name || 'Conta'}</div>
+                          <div className="font-medium">{a.name}</div>
+                          <div className="text-xs text-gray-500 mt-1">Moeda: {a.currency}</div>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {filteredCards.map((c: any) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { setFormData(prev => ({ ...prev, account_id: `cc:${c.id}`, currency: (c.currency as any) || 'EUR' })); setStep('details') }}
+                          className="text-left rounded-md border p-3 hover:bg-gray-50"
+                        >
+                          <div className="text-sm text-gray-600">{c.bank_name || 'Cartão'}</div>
+                          <div className="font-medium">{c.card_name}</div>
+                          <div className="text-xs text-gray-500 mt-1">Moeda: {c.currency}</div>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </>
               )}
             </div>
@@ -219,13 +301,18 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
           </div>
         ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Chosen account summary */}
+          {/* Chosen target summary */}
           <div className="flex items-center justify-between rounded-md border p-3">
             <div className="text-sm">
-              <div className="text-gray-600">Conta selecionada</div>
+              <div className="text-gray-600">{targetType === 'account' ? 'Conta selecionada' : 'Cartão selecionado'}</div>
               <div className="font-medium">{(() => {
-                const a = accounts.find((x: any) => x.id === formData.account_id)
-                return a ? `${a.name}${a.bank_name ? ' — ' + a.bank_name : ''} (${a.currency})` : formData.account_id
+                if (targetType === 'account') {
+                  const a = accounts.find((x: any) => x.id === formData.account_id)
+                  return a ? `${a.name}${a.bank_name ? ' — ' + a.bank_name : ''} (${a.currency})` : formData.account_id
+                }
+                const cardId = formData.account_id?.startsWith('cc:') ? formData.account_id.split(':')[1] : null
+                const c = creditCards.find((x: any) => x.id === cardId)
+                return c ? `${c.card_name}${c.bank_name ? ' — ' + c.bank_name : ''} (${c.currency})` : formData.account_id
               })()}</div>
             </div>
             <Button type="button" variant="outline" onClick={() => setStep('target')}>Trocar</Button>
@@ -240,8 +327,18 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                 onChange={(e) => setFormData(prev => ({ ...prev, type: e.target.value as any }))}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
               >
-                <option value="expense">Despesa</option>
-                <option value="income">Receita</option>
+                {targetType === 'account' ? (
+                  <>
+                    <option value="expense">Despesa</option>
+                    <option value="income">Receita</option>
+                  </>
+                ) : (
+                  <>
+                    {/* map to purchase/payment later */}
+                    <option value="expense">Compra</option>
+                    <option value="income">Pagamento</option>
+                  </>
+                )}
               </select>
             </div>
             
@@ -257,22 +354,24 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
             </div>
           </div>
           
-          <div className="space-y-2">
-            <Label htmlFor="category_id">Categoria</Label>
-            <select
-              id="category_id"
-              value={formData.category_id}
-              onChange={(e) => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-            >
-              <option value="">Selecione uma categoria</option>
-              {filteredCategories.map((category: any) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {targetType === 'account' && (
+            <div className="space-y-2">
+              <Label htmlFor="category_id">Categoria</Label>
+              <select
+                id="category_id"
+                value={formData.category_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Selecione uma categoria</option>
+                {filteredCategories.map((category: any) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           
           <div className="space-y-2">
             <Label htmlFor="description">Descrição</Label>
@@ -490,15 +589,19 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               
               <div className="space-y-2">
                 <Label htmlFor="currency">Moeda</Label>
-                <select
-                  id="currency"
-                  value={formData.currency}
-                  onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as any }))}
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="EUR">EUR (€)</option>
-                  <option value="BRL">BRL (R$)</option>
-                </select>
+                {targetType === 'account' ? (
+                  <select
+                    id="currency"
+                    value={formData.currency}
+                    onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as any }))}
+                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                  >
+                    <option value="EUR">EUR (€)</option>
+                    <option value="BRL">BRL (R$)</option>
+                  </select>
+                ) : (
+                  <div className="h-10 flex items-center px-3 rounded-md border bg-gray-50 text-sm">{formData.currency}</div>
+                )}
               </div>
             </div>
           )}
@@ -508,10 +611,19 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               Cancelar
             </Button>
             <Button type="submit">
-              {formData.type === 'income' ? (
+              {targetType === 'account' ? (
+                formData.type === 'income' ? (
                 <ArrowUpRight className="h-4 w-4 mr-2" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4 mr-2" />
+                )
               ) : (
-                <ArrowDownRight className="h-4 w-4 mr-2" />
+                formData.type === 'income' ? (
+                  // income used as Payment here
+                  <ArrowUpRight className="h-4 w-4 mr-2" />
+                ) : (
+                  <ArrowDownRight className="h-4 w-4 mr-2" />
+                )
               )}
               Adicionar Transação
             </Button>
