@@ -38,7 +38,7 @@ export default function ReceiptsPage() {
                   {t('receipts.subtitle')}
                 </p>
               </div>
-              <PDFUploader />
+              <PDFUploader forcedTarget={`rec`} />
             </div>
           </div>
 

@@ -4,11 +4,14 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAccounts } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Eye, EyeOff, Plus, RefreshCw, Wallet } from 'lucide-react'
+import { Building2, Eye, EyeOff, Plus, RefreshCw, Wallet, Trash2 } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 
 export default function AccountsPage() {
   const { t } = useLanguage()
   const { accounts, loading, error, refetch, createAccount } = useAccounts()
+  const router = useRouter()
   const [hideBalances, setHideBalances] = useState<boolean>(false)
   const [isCreating, setIsCreating] = useState<boolean>(false)
   const [createMsg, setCreateMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -20,6 +23,9 @@ export default function AccountsPage() {
     currency: 'EUR' as 'EUR' | 'BRL',
     balance: 0
   })
+  const [confirmingDelete, setConfirmingDelete] = useState<{ id: string; name: string } | null>(null)
+  const [confirmName, setConfirmName] = useState('')
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('hideBalances') : null
@@ -185,12 +191,24 @@ export default function AccountsPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {accounts.map((acc: any) => (
-              <div key={acc.id} className="rounded-lg border bg-white p-4">
+              <Link
+                key={acc.id}
+                href={`/accounts/${acc.id}`}
+                className="rounded-lg border bg-white p-4 hover:shadow-md transition-shadow block group"
+              >
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="text-sm text-gray-500">{acc.bank_name || 'Conta'}</div>
                     <div className="font-medium">{acc.name}</div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/pdf-import?account_id=${acc.id}`) }}
+                    className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                    title="Importar extrato PDF para esta conta"
+                  >
+                    PDF
+                  </button>
                 </div>
                 <div className="mt-3 text-2xl font-semibold tracking-tight">
                   {hideBalances ? (
@@ -204,8 +222,63 @@ export default function AccountsPage() {
                     Atualizado {new Date(acc.last_update).toLocaleDateString('pt-PT')}
                   </div>
                 )}
-              </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmingDelete({ id: acc.id, name: acc.name }); setConfirmName('') }}
+                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
+                    title="Eliminar conta"
+                  >
+                    <Trash2 className="h-4 w-4" /> Remover
+                  </button>
+                </div>
+              </Link>
             ))}
+          </div>
+        )}
+
+        {/* Delete confirmation dialog */}
+        {confirmingDelete && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="w-full max-w-md rounded-lg bg-white p-5 shadow-lg">
+              <h2 className="text-lg font-semibold mb-1">Remover conta</h2>
+              <p className="text-sm text-gray-600 mb-3">
+                Esta ação é irreversível. Para confirmar, escreva o nome da conta exatamente como abaixo:
+              </p>
+              <div className="p-2 rounded border bg-gray-50 text-sm font-medium mb-3">{confirmingDelete.name}</div>
+              <input
+                className="w-full px-3 py-2 rounded-md border"
+                placeholder="Digite o nome da conta para confirmar"
+                value={confirmName}
+                onChange={(e) => setConfirmName(e.target.value)}
+              />
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  className="rounded-md border px-3 py-2 hover:bg-gray-50"
+                  onClick={() => setConfirmingDelete(null)}
+                >
+                  Cancelar
+                </button>
+                <button
+                  disabled={deleteLoading || confirmName !== confirmingDelete.name}
+                  className="inline-flex items-center gap-2 rounded-md bg-red-600 text-white px-3 py-2 disabled:opacity-50"
+                  onClick={async () => {
+                    if (!confirmingDelete) return
+                    try {
+                      setDeleteLoading(true)
+                      await fetch(`/api/accounts?id=${confirmingDelete.id}`, { method: 'DELETE' })
+                      setConfirmingDelete(null)
+                      await refetch()
+                    } finally {
+                      setDeleteLoading(false)
+                    }
+                  }}
+                >
+                  {deleteLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                  Remover definitivamente
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>

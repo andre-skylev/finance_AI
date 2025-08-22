@@ -36,19 +36,31 @@ interface Account {
   type: string
 }
 
+interface CreditCardOption {
+  id: string
+  bank_name: string
+  card_name: string
+  last_four_digits?: string
+  card_type: 'credit' | 'debit'
+  is_active?: boolean
+}
+
 interface PDFUploaderProps {
   onSuccess?: () => void
   defaultDocumentType?: 'bank_statement' | 'credit_card' | 'receipt'
+  preselectedAccountId?: string
+  forcedTarget?: string // e.g., 'acc:<id>' | 'cc:<id>' | 'rec'
 }
 
-export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
+export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTarget }: PDFUploaderProps) {
   const { t } = useLanguage()
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [extractedData, setExtractedData] = useState<ExtractedData | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [selectedAccountId, setSelectedAccountId] = useState<string>('')
+  const [creditCards, setCreditCards] = useState<CreditCardOption[]>([])
+  const [selectedTarget, setSelectedTarget] = useState<string>('') // e.g., acc:123 or cc:456
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
@@ -70,6 +82,24 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
       if (previewUrl) URL.revokeObjectURL(previewUrl)
     }
   }, [previewUrl])
+
+  // Preselect destination from URL query (account_id or credit_card_id) or prop; allow forced target
+  useEffect(() => {
+    if (forcedTarget) {
+      setSelectedTarget(forcedTarget)
+      return
+    }
+    try {
+      const sp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+      const acc = sp?.get('account_id')
+      const cc = sp?.get('credit_card_id')
+      if (!selectedTarget) {
+        if (cc) setSelectedTarget(`cc:${cc}`)
+        else if (acc) setSelectedTarget(`acc:${acc}`)
+        else if (preselectedAccountId) setSelectedTarget(`acc:${preselectedAccountId}`)
+      }
+    } catch {}
+  }, [preselectedAccountId, selectedTarget, forcedTarget])
 
   async function compressImageIfNeeded(original: File): Promise<File> {
     // Only compress images; PDFs are left untouched
@@ -287,6 +317,7 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
 
   setExtractedData(result.data)
       setAccounts(result.accounts)
+      setCreditCards(result.creditCards || [])
       setSuccess(result.message)
 
       // Notify listeners (pdf-import page) with full result for card recognition UI
@@ -301,7 +332,8 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
   }
 
   const handleConfirm = async () => {
-    if (!extractedData || !selectedAccountId) {
+  const target = forcedTarget || selectedTarget
+  if (!extractedData || !target) {
       setError('Selecione uma conta para prosseguir')
       return
     }
@@ -317,7 +349,7 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
         },
         body: JSON.stringify({
           transactions: extractedData.transactions,
-          accountId: selectedAccountId,
+          target, // acc:ID | cc:ID | rec
           receipts: extractedData.receipts || [],
         }),
       })
@@ -328,10 +360,10 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
         throw new Error(result.error || 'Erro ao salvar transações')
       }
 
-      setSuccess(result.message)
+  setSuccess(result.message)
       setExtractedData(null)
       setFile(null)
-      setSelectedAccountId('')
+  if (!forcedTarget) setSelectedTarget('')
       
       // Reset file input
       const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -497,22 +529,37 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
                 </div>
               </div>
 
-              {/* Account Selection */}
+              {/* Account/Card Selection (hidden when forcedTarget is provided) */}
+              {!forcedTarget && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">{t('pdfUploader.selectAccount')}</label>
                 <select
-                  value={selectedAccountId}
-                  onChange={(e) => setSelectedAccountId(e.target.value)}
+                  value={selectedTarget}
+                  onChange={(e) => setSelectedTarget(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
                 >
                   <option value="">{t('pdfUploader.selectAccountPlaceholder')}</option>
-                  {accounts.map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name} ({account.type})
-                    </option>
-                  ))}
+                  {accounts.length > 0 && (
+                    <optgroup label="Contas Bancárias">
+                      {accounts.map((account) => (
+                        <option key={`acc:${account.id}`} value={`acc:${account.id}`}>
+                          {account.name} ({account.type})
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {creditCards.length > 0 && (
+                    <optgroup label="Cartões de Crédito">
+                      {creditCards.map((cc) => (
+                        <option key={`cc:${cc.id}`} value={`cc:${cc.id}`}>
+                          {cc.bank_name} {cc.card_name}{cc.last_four_digits ? ` •••• ${cc.last_four_digits}` : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
+              )}
 
               {/* Transactions Table */}
               <div>
@@ -632,7 +679,7 @@ export default function PDFUploader({ onSuccess }: PDFUploaderProps) {
               <div className="flex justify-end pt-4">
                 <button
                   onClick={handleConfirm}
-                  disabled={!selectedAccountId || isConfirming}
+                  disabled={!selectedTarget || isConfirming}
                   className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConfirming ? (

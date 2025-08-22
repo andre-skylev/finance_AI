@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Plus, CreditCard, Edit2, Trash2, Eye, EyeOff } from 'lucide-react'
+import { useRouter } from 'next/navigation'
 
 interface CreditCard {
   id: string
@@ -45,6 +46,7 @@ interface NewCreditCard {
 }
 
 export default function CreditCardsPage() {
+  const router = useRouter()
   const [creditCards, setCreditCards] = useState<CreditCard[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -526,6 +528,23 @@ export default function CreditCardsPage() {
                     <span className="text-sm text-red-600 font-medium">Cartão Inativo</span>
                   </div>
                 )}
+
+                <div className="pt-2 border-t flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/credit-cards/${card.id}`)}
+                  >
+                    Ver Movimentos
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => router.push(`/pdf-import?credit_card_id=${card.id}`)}
+                  >
+                    Importar PDF
+                  </Button>
+                </div>
               </CardContent>
             </Card>
           ))}

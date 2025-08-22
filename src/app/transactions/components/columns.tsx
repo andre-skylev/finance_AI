@@ -24,7 +24,13 @@ export type Transaction = {
   account: { name: string; bank_name: string } | null
 }
 
-export const columns: ColumnDef<Transaction>[] = [
+export type TransactionTableActions = {
+  onEdit?: (t: Transaction) => void
+  onDelete?: (t: Transaction) => void
+  onView?: (t: Transaction) => void
+}
+
+export const buildColumns = (actions?: TransactionTableActions): ColumnDef<Transaction>[] => [
   {
     accessorKey: "description",
     header: "Description",
@@ -84,9 +90,9 @@ export const columns: ColumnDef<Transaction>[] = [
               Copy transaction ID
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>View details</DropdownMenuItem>
-            <DropdownMenuItem>Edit transaction</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">Delete transaction</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => actions?.onView?.(transaction)}>View details</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => actions?.onEdit?.(transaction)}>Edit transaction</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" onClick={() => actions?.onDelete?.(transaction)}>Delete transaction</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       )

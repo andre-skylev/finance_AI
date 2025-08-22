@@ -99,6 +99,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid account' }, { status: 400 })
     }
 
+    // If category is provided, validate it belongs to user or is a default
+    if (category_id) {
+      const { data: category, error: categoryError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', category_id)
+        .or(`user_id.eq.${user.id},is_default.eq.true`)
+        .single()
+
+      if (categoryError || !category) {
+        return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+      }
+    }
+
     // Create transaction
     const { data: transaction, error } = await supabase
       .from('transactions')
@@ -161,18 +175,34 @@ export async function PUT(request: NextRequest) {
     }
 
     // Update transaction
+    // Build partial update object only with provided fields
+    const updateData: any = {}
+    if (account_id !== undefined) updateData.account_id = account_id
+    if (category_id !== undefined) updateData.category_id = category_id || null
+    if (amount !== undefined) updateData.amount = parseFloat(amount)
+    if (currency !== undefined) updateData.currency = currency
+    if (description !== undefined) updateData.description = description
+    if (transaction_date !== undefined) updateData.transaction_date = transaction_date
+    if (type !== undefined) updateData.type = type
+    if (tags !== undefined) updateData.tags = tags
+
+    // If updating category, validate it belongs to user or is default
+    if (category_id !== undefined && category_id !== null && category_id !== '') {
+      const { data: category, error: categoryError } = await supabase
+        .from('categories')
+        .select('id')
+        .eq('id', category_id)
+        .or(`user_id.eq.${user.id},is_default.eq.true`)
+        .single()
+
+      if (categoryError || !category) {
+        return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+      }
+    }
+
     const { data: transaction, error } = await supabase
       .from('transactions')
-      .update({
-        account_id,
-        category_id: category_id || null,
-        amount: amount ? parseFloat(amount) : undefined,
-        currency,
-        description,
-        transaction_date,
-        type,
-        tags
-      })
+      .update(updateData)
       .eq('id', id)
       .eq('user_id', user.id)
       .select(`

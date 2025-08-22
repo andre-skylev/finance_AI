@@ -14,9 +14,12 @@ import {
 
 interface MobileTransactionCardProps {
   transaction: Transaction
+  onEdit?: (t: Transaction) => void
+  onDelete?: (t: Transaction) => void
+  onView?: (t: Transaction) => void
 }
 
-export function MobileTransactionCard({ transaction }: MobileTransactionCardProps) {
+export function MobileTransactionCard({ transaction, onEdit, onDelete, onView }: MobileTransactionCardProps) {
   const amount = new Intl.NumberFormat("pt-PT", {
     style: "currency",
     currency: transaction.currency,
@@ -46,9 +49,9 @@ export function MobileTransactionCard({ transaction }: MobileTransactionCardProp
               Copy transaction ID
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>View details</DropdownMenuItem>
-            <DropdownMenuItem>Edit transaction</DropdownMenuItem>
-            <DropdownMenuItem className="text-destructive">Delete transaction</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onView?.(transaction)}>View details</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onEdit?.(transaction)}>Edit transaction</DropdownMenuItem>
+            <DropdownMenuItem className="text-destructive" onClick={() => onDelete?.(transaction)}>Delete transaction</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

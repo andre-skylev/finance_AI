@@ -1,13 +1,13 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import PDFUploader from '@/components/PDFUploader'
 import { FileText, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 export default function PDFImportPage() {
   const { t } = useLanguage()
@@ -16,6 +16,9 @@ export default function PDFImportPage() {
   const [creatingCard, setCreatingCard] = useState(false)
   const supabase = createClient()
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const preselectAccountId = useMemo(() => searchParams?.get('account_id') || '', [searchParams])
+  const preselectCreditCardId = useMemo(() => searchParams?.get('credit_card_id') || '', [searchParams])
 
   const handleSuccess = () => {
     setRefreshKey(prev => prev + 1)
@@ -56,7 +59,7 @@ export default function PDFImportPage() {
               </ul>
             </div>
 
-            <PDFUploader onSuccess={handleSuccess} key={refreshKey} />
+            <PDFUploader onSuccess={handleSuccess} key={refreshKey} preselectedAccountId={preselectAccountId || preselectCreditCardId} />
 
             <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
               <h3 className="text-sm font-medium text-yellow-800 mb-2">{t('pdfImport.tipsTitle')}</h3>

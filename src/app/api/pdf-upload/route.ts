@@ -1183,6 +1183,11 @@ export async function POST(request: NextRequest) {
       .from('accounts')
       .select('id, name, type')
       .eq('user_id', user.id)
+    // Cartões do usuário para seleção (retornar separadamente; cliente pode combinar)
+    const { data: creditCards } = await supabase
+      .from('credit_cards')
+      .select('id, bank_name, card_name, last_four_digits, card_type, is_active')
+      .eq('user_id', user.id)
 
     await incrementDailyUsage()
 
@@ -1192,6 +1197,7 @@ export async function POST(request: NextRequest) {
       message: `Processado com Google Document AI em ${processingTime}ms` ,
       data,
       accounts: accounts || [],
+      creditCards: creditCards || [],
     }
 
     // Optional raw payload for client-side mapping decisions
