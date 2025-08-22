@@ -18,15 +18,15 @@ export default function HomePage() {
       icon: Banknote,
       title: language === 'pt' ? '1) Crie suas contas' : '1) Create your accounts',
       desc: language === 'pt'
-        ? 'Vá até Contas e adicione contas (corrente, poupança, cartão). Você pode ocultar saldos com o “olhinho”.'
-        : 'Go to Accounts and add accounts (checking, savings, credit card). You can hide balances with the eye icon.'
+        ? 'Vá até Contas e adicione contas (corrente, poupança, cartão). Ao definir o saldo inicial, ele é lançado como entrada automaticamente. Você pode ocultar saldos com o “olhinho”.'
+        : 'Go to Accounts and add accounts (checking, savings, credit card). When you set an initial balance, it’s recorded as an income entry automatically. You can hide balances with the eye icon.'
     },
     {
       icon: FileText,
-      title: language === 'pt' ? '2) Importe documentos (PDF/Imagem)' : '2) Import documents (PDF/Image)',
+      title: language === 'pt' ? '2) Importe extratos, faturas e recibos' : '2) Import statements, invoices, and receipts',
       desc: language === 'pt'
-        ? 'Use Importar PDF para enviar extratos, faturas ou recibos. Detectamos automaticamente o tipo e extraímos transações/itens.'
-        : 'Use Import PDF to upload statements, invoices, or receipts. We auto-detect the type and extract transactions/items.'
+        ? 'Use o importador diretamente nas páginas da Conta e do Cartão de Crédito para extratos/faturas. Para recibos, use a página Recibos. Também há uma página “Importar PDF”. A IA detecta o tipo e extrai transações/itens.'
+        : 'Use the importer directly in each Account and Credit Card page for statements/invoices. For receipts, use the Receipts page. There’s also a standalone “Import PDF” page. AI detects the type and extracts transactions/items.'
     },
     {
       icon: LineChart,
@@ -74,16 +74,16 @@ export default function HomePage() {
       label: language === 'pt' ? 'Ir para Contas' : 'Go to Accounts'
     },
     {
-      href: '/pdf-import',
-      label: language === 'pt' ? 'Importar PDF' : 'Import PDF'
-    },
-    {
       href: '/dashboard',
       label: language === 'pt' ? 'Abrir Dashboard' : 'Open Dashboard'
     },
     {
       href: '/transactions/add',
       label: language === 'pt' ? 'Adicionar Transação (manual)' : 'Add Transaction (manual)'
+    },
+    {
+      href: '/receipts',
+      label: language === 'pt' ? 'Abrir Recibos' : 'Open Receipts'
     }
   ]
 
@@ -144,8 +144,8 @@ export default function HomePage() {
               </div>
               <p className="mt-1 text-gray-600">
                 {language === 'pt'
-                  ? 'Envie um PDF em Importar PDF. A plataforma detecta o tipo e extrai as transações automaticamente.'
-                  : 'Upload a PDF in Import PDF. The platform detects the type and extracts transactions automatically.'}
+                  ? 'Importe direto pela página da Conta/Cartão ou use a página “Importar PDF”. A plataforma detecta o tipo e extrai as transações automaticamente.'
+                  : 'Import directly from the Account/Card page or use the “Import PDF” page. The platform detects the type and extracts transactions automatically.'}
               </p>
             </div>
             <div className="rounded-lg border p-4">

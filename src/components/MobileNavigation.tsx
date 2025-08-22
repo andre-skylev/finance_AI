@@ -14,7 +14,8 @@ import {
   Settings,
   LogOut,
   Globe,
-  Wallet
+  Wallet,
+  HelpCircle
 } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useAuth } from '@/components/AuthProvider'
@@ -42,7 +43,9 @@ export function MobileNavigation() {
   { href: '/accounts', icon: Wallet, label: t('settings.accounts') },
     { href: '/categories', icon: Receipt, label: t('navigation.categories') },
     { href: '/installments', icon: ArrowLeftRight, label: t('navigation.installments') },
-    { href: '/fixed-costs', icon: Receipt, label: t('navigation.fixedCosts') },
+  { href: '/fixed-costs', icon: Receipt, label: t('navigation.fixedCosts') },
+  // Help shortcut to onboarding steps (home page)
+  { href: '/', icon: HelpCircle, label: language === 'pt' ? 'Ajuda' : 'Help' },
     { href: '/settings', icon: Settings, label: t('navigation.settings') }
   ]
 
