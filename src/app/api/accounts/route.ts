@@ -73,6 +73,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create account' }, { status: 500 })
     }
 
+    // If an initial balance was provided, record it as a transaction so it appears in the ledger
+    try {
+      const initial = parseFloat(balance)
+      if (!isNaN(initial) && initial !== 0 && account?.id) {
+        const isIncome = initial > 0
+        const signedAmount = isIncome ? Math.abs(initial) : -Math.abs(initial)
+        const today = new Date().toISOString().slice(0, 10)
+        const { error: txErr } = await supabase
+          .from('transactions')
+          .insert([
+            {
+              user_id: user.id,
+              account_id: account.id,
+              amount: signedAmount,
+              currency: currency,
+              description: 'Initial Balance', // keep simple and language-agnostic on server
+              transaction_date: today,
+              type: isIncome ? 'income' : 'expense',
+              category_id: null,
+            },
+          ])
+        if (txErr) {
+          console.warn('Account created, but failed to create initial balance transaction:', txErr)
+        }
+      }
+    } catch (e) {
+      console.warn('Non-blocking error while creating initial balance transaction:', e)
+    }
+
     return NextResponse.json({ account }, { status: 201 })
   } catch (error) {
     console.error('API Error:', error)

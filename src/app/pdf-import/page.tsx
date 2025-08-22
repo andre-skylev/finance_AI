@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import PDFUploader from '@/components/PDFUploader'
 import { FileText, ArrowLeft } from 'lucide-react'
@@ -9,7 +9,7 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 
-export default function PDFImportPage() {
+function PDFImportContent() {
   const { t } = useLanguage()
   const [refreshKey, setRefreshKey] = useState(0)
   const [lastImport, setLastImport] = useState<any>(null)
@@ -33,8 +33,7 @@ export default function PDFImportPage() {
   }, [])
 
   return (
-    <ProtectedRoute>
-      <div className="space-y-6">
+    <div className="space-y-6">
         {/* Header */}
         <div>
           <h1 className="text-2xl font-semibold text-gray-900 flex items-center">
@@ -164,6 +163,15 @@ export default function PDFImportPage() {
           </div>
         </div>
       </div>
+  )
+}
+
+export default function PDFImportPage() {
+  return (
+    <ProtectedRoute>
+      <Suspense fallback={<div className="p-4 text-sm text-gray-600">Carregando…</div>}>
+        <PDFImportContent />
+      </Suspense>
     </ProtectedRoute>
   )
 }

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { Suspense, useState, useEffect } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAccounts } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import { useCategories } from '@/hooks/useFinanceData'
 
-export default function TransactionsPage() {
+function TransactionsPageContent() {
   const { user } = useAuth()
   const supabase = createClient()
   const [transactions, setTransactions] = useState<Transaction[]>([])
@@ -255,5 +255,13 @@ export default function TransactionsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function TransactionsPage() {
+  return (
+    <Suspense fallback={<div className="p-4 text-sm text-gray-600">Carregando…</div>}>
+      <TransactionsPageContent />
+    </Suspense>
   )
 }
