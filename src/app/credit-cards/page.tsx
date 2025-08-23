@@ -141,17 +141,28 @@ export default function CreditCardsPage() {
   }
 
   const handleDeleteCard = async (cardId: string) => {
-  if (!confirm(t('creditCardsPage.confirm.delete'))) return
+    const hardDelete = confirm(
+      t('creditCardsPage.confirm.deleteHard') || 
+      'ATENÇÃO: Isso excluirá PERMANENTEMENTE o cartão e TODAS as transações relacionadas. Tem certeza?'
+    )
+    
+    if (!hardDelete) {
+      const softDelete = confirm(t('creditCardsPage.confirm.delete') || 'Desativar este cartão?')
+      if (!softDelete) return
+    }
 
     try {
-      const { error } = await supabase
-        .from('credit_cards')
-        .delete()
-        .eq('id', cardId)
+      const response = await fetch(`/api/credit-cards?id=${cardId}&hard=${hardDelete}`, {
+        method: 'DELETE',
+      })
 
-      if (error) throw error
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete credit card')
+      }
 
-  alert(t('creditCardsPage.success.delete'))
+      const result = await response.json()
+      alert(result.message || t('creditCardsPage.success.delete'))
       fetchCreditCards()
     } catch (error) {
       console.error(t('creditCardsPage.errors.delete') + ':', error)

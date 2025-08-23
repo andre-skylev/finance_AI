@@ -174,26 +174,87 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const hardDelete = searchParams.get('hard') === 'true'
 
     if (!id) {
       return NextResponse.json({ error: 'Account ID is required' }, { status: 400 })
     }
 
-    // Soft delete by setting is_active to false
-    const { data: account, error } = await supabase
+    // Verificar se a conta pertence ao usuário
+    const { data: account, error: accountError } = await supabase
       .from('accounts')
-      .update({ is_active: false })
+      .select('id, name')
       .eq('id', id)
       .eq('user_id', user.id)
-      .select()
       .single()
 
-    if (error) {
-      console.error('Error deleting account:', error)
-      return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
+    if (accountError || !account) {
+      return NextResponse.json({ error: 'Account not found' }, { status: 404 })
     }
 
-    return NextResponse.json({ account })
+    if (hardDelete) {
+      // Exclusão completa - excluir todas as transações relacionadas primeiro
+      console.log(`Excluindo transações da conta ${account.name} (${id})`)
+      
+      // Excluir transações da conta
+      const { error: transactionsError } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('account_id', id)
+        .eq('user_id', user.id)
+
+      if (transactionsError) {
+        console.error('Erro ao excluir transações:', transactionsError)
+        return NextResponse.json({ error: 'Failed to delete account transactions' }, { status: 500 })
+      }
+
+      // Excluir recibos relacionados à conta
+      const { error: receiptsError } = await supabase
+        .from('receipts')
+        .delete()
+        .eq('account_id', id)
+        .eq('user_id', user.id)
+
+      if (receiptsError) {
+        console.error('Erro ao excluir recibos:', receiptsError)
+        // Não retornar erro, recibos são opcionais
+      }
+
+      // Excluir a conta
+      const { data: deletedAccount, error: deleteError } = await supabase
+        .from('accounts')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (deleteError) {
+        console.error('Erro ao excluir conta:', deleteError)
+        return NextResponse.json({ error: 'Failed to delete account' }, { status: 500 })
+      }
+
+      return NextResponse.json({ 
+        account: deletedAccount, 
+        message: 'Account and all related data deleted successfully' 
+      })
+    } else {
+      // Soft delete by setting is_active to false
+      const { data: account, error } = await supabase
+        .from('accounts')
+        .update({ is_active: false })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single()
+
+      if (error) {
+        console.error('Error deactivating account:', error)
+        return NextResponse.json({ error: 'Failed to deactivate account' }, { status: 500 })
+      }
+
+      return NextResponse.json({ account })
+    }
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

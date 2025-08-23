@@ -39,6 +39,9 @@ export async function GET(request: NextRequest) {
       case 'budget-vs-actual':
         return await getBudgetVsActual(supabase, user.id)
       
+      case 'fixed-costs':
+        return await getFixedCostsData(supabase, user.id)
+      
       default:
         return NextResponse.json({ error: 'Invalid type parameter' }, { status: 400 })
     }
@@ -66,10 +69,10 @@ async function getLatestRates(supabase: any): Promise<Rates> {
 }
 
 function convertAmount(amount: number, from: 'EUR'|'BRL', to: 'EUR'|'BRL', rates: Rates) {
-  if (from === to) return amount
-  if (from === 'EUR' && to === 'BRL') return amount * rates.eur_to_brl
-  if (from === 'BRL' && to === 'EUR') return amount * rates.brl_to_eur
-  return amount
+  if (from === to) return Math.round(amount * 100) / 100
+  if (from === 'EUR' && to === 'BRL') return Math.round(amount * rates.eur_to_brl * 100) / 100
+  if (from === 'BRL' && to === 'EUR') return Math.round(amount * rates.brl_to_eur * 100) / 100
+  return Math.round(amount * 100) / 100
 }
 
 async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
@@ -288,7 +291,7 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
       console.error('Error fetching last month transactions:', lastMonthError)
     }
 
-    // Calculate KPIs
+    // Calculate KPIs including fixed costs
     const thisMonthIncome = thisMonthTransactions
       ?.filter((t: any) => t.type === 'income')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
@@ -296,6 +299,31 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     const thisMonthExpenses = thisMonthTransactions
       ?.filter((t: any) => t.type === 'expense')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
+
+    // Get fixed costs for current month
+    const { data: fixedCostsEntries } = await supabase
+      .from('fixed_cost_entries')
+      .select('amount, currency')
+      .eq('user_id', userId)
+      .gte('month', currentMonth.toISOString().split('T')[0])
+      .lt('month', nextMonth.toISOString().split('T')[0])
+
+    const thisMonthFixedCosts = (fixedCostsEntries || [])
+      .reduce((sum: number, entry: any) => sum + convertAmount(Number(entry.amount || 0), (entry.currency || 'EUR'), displayCurrency, rates), 0)
+
+    // Get estimated fixed costs if no entries exist
+    const { data: fixedCosts } = await supabase
+      .from('fixed_costs')
+      .select('estimated_amount, currency')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    const estimatedFixedCosts = (fixedCosts || [])
+      .reduce((sum: number, cost: any) => sum + convertAmount(Number(cost.estimated_amount || 0), (cost.currency || 'EUR'), displayCurrency, rates), 0)
+
+    // Use actual fixed costs if available, otherwise use estimated
+    const totalFixedCosts = thisMonthFixedCosts > 0 ? thisMonthFixedCosts : estimatedFixedCosts
+    const totalMonthlyExpenses = thisMonthExpenses + totalFixedCosts
 
     const lastMonthIncome = lastMonthTransactions
       ?.filter((t: any) => t.type === 'income')
@@ -305,17 +333,31 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
       ?.filter((t: any) => t.type === 'expense')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
+    // Get last month fixed costs
+    const { data: lastMonthFixedCostsEntries } = await supabase
+      .from('fixed_cost_entries')
+      .select('amount, currency')
+      .eq('user_id', userId)
+      .gte('month', lastMonth.toISOString().split('T')[0])
+      .lt('month', currentMonth.toISOString().split('T')[0])
+
+    const lastMonthFixedCosts = (lastMonthFixedCostsEntries || [])
+      .reduce((sum: number, entry: any) => sum + convertAmount(Number(entry.amount || 0), (entry.currency || 'EUR'), displayCurrency, rates), 0)
+
+    const lastTotalFixedCosts = lastMonthFixedCosts > 0 ? lastMonthFixedCosts : estimatedFixedCosts
+    const lastTotalMonthlyExpenses = lastMonthExpenses + lastTotalFixedCosts
+
     // Calculate growth rates
     const incomeGrowth = lastMonthIncome > 0 
       ? ((thisMonthIncome - lastMonthIncome) / lastMonthIncome) * 100 
       : 0
 
-    const expenseGrowth = lastMonthExpenses > 0 
-      ? ((thisMonthExpenses - lastMonthExpenses) / lastMonthExpenses) * 100 
+    const expenseGrowth = lastTotalMonthlyExpenses > 0 
+      ? ((totalMonthlyExpenses - lastTotalMonthlyExpenses) / lastTotalMonthlyExpenses) * 100 
       : 0
 
     const savingsRate = thisMonthIncome > 0 
-      ? ((thisMonthIncome - thisMonthExpenses) / thisMonthIncome) * 100 
+      ? ((thisMonthIncome - totalMonthlyExpenses) / thisMonthIncome) * 100 
       : 0
 
     // Get total net worth
@@ -332,13 +374,17 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     const liabilities = (ccs || []).reduce((s: number, c: any) => s + convertAmount(Number(c.current_balance || 0), (c.currency || 'EUR'), displayCurrency, rates), 0)
 
     const kpis = {
-      // As requested: primary KPI reflects income - expenses (period net)
-      totalBalance: thisMonthIncome - thisMonthExpenses,
+      // Primary KPI reflects income - all expenses (including fixed costs)
+      totalBalance: thisMonthIncome - totalMonthlyExpenses,
       totalBalanceChange: 0, // TODO: Calculate based on historical data
       monthlyIncome: thisMonthIncome,
       monthlyIncomeChange: incomeGrowth,
-      monthlyExpenses: thisMonthExpenses,
+      monthlyExpenses: totalMonthlyExpenses,
       monthlyExpensesChange: expenseGrowth,
+      variableExpenses: thisMonthExpenses,
+      fixedCosts: totalFixedCosts,
+      estimatedFixedCosts: estimatedFixedCosts,
+      actualFixedCosts: thisMonthFixedCosts,
       savingsRate: savingsRate,
       savingsRateChange: 0 // TODO: Calculate based on historical data
     }
@@ -384,5 +430,128 @@ async function getBudgetVsActual(supabase: any, userId: string) {
   } catch (error) {
     console.error('Error in getBudgetVsActual:', error)
     return NextResponse.json({ error: 'Failed to get budget vs actual' }, { status: 500 })
+  }
+}
+
+async function getFixedCostsData(supabase: any, userId: string) {
+  try {
+    const currentMonth = new Date()
+    currentMonth.setDate(1)
+    currentMonth.setHours(0, 0, 0, 0)
+
+    const nextMonth = new Date(currentMonth)
+    nextMonth.setMonth(nextMonth.getMonth() + 1)
+
+    // Get active fixed costs
+    const { data: fixedCosts, error: fixedCostsError } = await supabase
+      .from('fixed_costs')
+      .select(`
+        id,
+        name,
+        type,
+        estimated_amount,
+        currency,
+        provider,
+        due_day,
+        is_active
+      `)
+      .eq('user_id', userId)
+      .eq('is_active', true)
+
+    if (fixedCostsError) {
+      console.error('Error fetching fixed costs:', fixedCostsError)
+      return NextResponse.json({ error: 'Failed to fetch fixed costs' }, { status: 500 })
+    }
+
+    // Get current month entries
+    const { data: monthlyEntries, error: entriesError } = await supabase
+      .from('fixed_cost_entries')
+      .select(`
+        fixed_cost_id,
+        amount,
+        status,
+        payment_date,
+        provider_name
+      `)
+      .eq('user_id', userId)
+      .gte('month', currentMonth.toISOString().split('T')[0])
+      .lt('month', nextMonth.toISOString().split('T')[0])
+
+    if (entriesError) {
+      console.error('Error fetching monthly entries:', entriesError)
+    }
+
+    // Combine data
+    const entriesMap = new Map()
+    ;(monthlyEntries || []).forEach((entry: any) => {
+      entriesMap.set(entry.fixed_cost_id, entry)
+    })
+
+    const dashboard = {
+      totalEstimated: 0,
+      totalActual: 0,
+      paidCount: 0,
+      pendingCount: 0,
+      overdueCount: 0,
+      byType: {} as Record<string, {
+        estimated: number,
+        actual: number,
+        count: number
+      }>
+    }
+
+    const costs = (fixedCosts || []).map((cost: any) => {
+      const entry = entriesMap.get(cost.id)
+      const estimated = parseFloat(cost.estimated_amount || 0)
+      const actual = entry ? parseFloat(entry.amount || 0) : 0
+      
+      dashboard.totalEstimated += estimated
+      
+      if (entry) {
+        dashboard.totalActual += actual
+        
+        if (entry.status === 'paid') {
+          dashboard.paidCount++
+        } else if (entry.status === 'pending') {
+          dashboard.pendingCount++
+        } else if (entry.status === 'overdue') {
+          dashboard.overdueCount++
+        }
+      } else {
+        // Not tracked this month, count as pending
+        dashboard.pendingCount++
+      }
+
+      // Group by type
+      if (!dashboard.byType[cost.type]) {
+        dashboard.byType[cost.type] = { estimated: 0, actual: 0, count: 0 }
+      }
+      dashboard.byType[cost.type].estimated += estimated
+      dashboard.byType[cost.type].actual += actual
+      dashboard.byType[cost.type].count++
+
+      return {
+        id: cost.id,
+        name: cost.name,
+        type: cost.type,
+        estimated: estimated,
+        actual: actual,
+        currency: cost.currency,
+        provider: entry?.provider_name || cost.provider,
+        dueDay: cost.due_day,
+        status: entry?.status || 'pending',
+        paymentDate: entry?.payment_date,
+        variance: estimated > 0 ? ((actual - estimated) / estimated) * 100 : 0
+      }
+    })
+
+    return NextResponse.json({ 
+      dashboard,
+      costs,
+      month: currentMonth.toISOString().split('T')[0]
+    })
+  } catch (error) {
+    console.error('Error in getFixedCostsData:', error)
+    return NextResponse.json({ error: 'Failed to get fixed costs data' }, { status: 500 })
   }
 }

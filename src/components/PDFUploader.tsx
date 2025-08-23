@@ -409,6 +409,12 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
     setError('')
 
     try {
+      console.log('PDF Confirm - Enviando dados:', {
+        transactions: editableTransactions || [],
+        target,
+        receipts: extractedData.receipts || [],
+      })
+
       const response = await fetch('/api/pdf-confirm', {
         method: 'POST',
         headers: {

@@ -100,9 +100,20 @@
     "actual": "Realizado",
     "variances": "Variações",
     "noBudgetData": "Sem dados de orçamento",
-  "noBudgetDataDesc": "Configure orçamentos para ver comparações",
-  "coach": "Sugestões inteligentes",
-  "noCoachTips": "Sem sugestões no momento"
+    "noBudgetDataDesc": "Configure orçamentos para ver comparações",
+    "coach": "Sugestões inteligentes",
+    "noCoachTips": "Sem sugestões no momento",
+    "fixedCosts": {
+      "title": "Custos Fixos",
+      "estimated": "Estimado",
+      "actual": "Real",
+      "completion": "Completude",
+      "paid": "Pagos",
+      "pending": "Pendentes",
+      "overdue": "Atrasados",
+      "topCategories": "Principais Categorias",
+      "noData": "Nenhum dado disponível"
+    }
   },
   "transactions": {
     "title": "Transações",
@@ -146,16 +157,16 @@
     "title": "Custos Fixos",
     "subtitle": "Gerir os seus custos recorrentes",
     "newCost": "Novo Custo Fixo",
-  "totalMonthly": "Total Mensal Estimado",
-  "activeCosts": "custos ativos",
-  "noCosts": "Nenhum custo fixo encontrado",
+    "totalMonthly": "Total Mensal Estimado",
+    "activeCosts": "custos ativos",
+    "noCosts": "Nenhum custo fixo encontrado",
     "addFirst": "Adicionar primeiro custo fixo",
     "name": "Nome",
     "amount": "Valor",
     "period": "Período",
     "startDate": "Data de Início",
-  "endDate": "Data de Fim (opcional)",
-  "dueDay": "Dia de Vencimento",
+    "endDate": "Data de Fim (opcional)",
+    "dueDay": "Dia de Vencimento",
     "nextDue": "Próximo",
     "active": "Ativo",
     "inactive": "Inativo",
@@ -166,7 +177,49 @@
     "placeholders": {
       "name": "Ex: Renda da casa",
       "amount": "0.00",
-      "dueDay": "Ex: 5"
+      "dueDay": "Ex: 5",
+      "notes": "Observações sobre este pagamento..."
+    },
+    "tabs": {
+      "overview": "Visão Geral",
+      "fixed-costs": "Custos Fixos",
+      "monthly-entries": "Lançamentos Mensais"
+    },
+    "monthlyBudget": "Orçamento Mensal",
+    "actualMonth": "Gasto Real",
+    "statusLabel": "Estado",
+    "paid": "pagos",
+    "pending": "pendentes",
+    "overdue": "em atraso",
+    "thisMonth": "Este Mês",
+    "generateEntries": "Gerar Lançamentos",
+    "noEntriesThisMonth": "Sem lançamentos para este mês",
+    "addEntry": "Adicionar Lançamento",
+    "markPaid": "Marcar Pago",
+    "manageCosts": "Gerir Custos Fixos",
+    "provider": "Fornecedor",
+    "type": "Tipo",
+    "fixed": "fixo",
+    "estimatedAmount": "Valor Estimado",
+    "autoPayment": "Débito Direto",
+    "selectCost": "Selecionar Custo Fixo",
+    "paymentDate": "Data de Pagamento",
+    "notes": "Notas",
+    "saveEntry": "Guardar Lançamento",
+    "types": {
+      "utilities": "Serviços Públicos",
+      "housing": "Habitação",
+      "insurance": "Seguros",
+      "transport": "Transportes",
+      "communication": "Comunicações",
+      "financial": "Financeiros",
+      "subscriptions": "Subscrições",
+      "other": "Outros"
+    },
+    "status": {
+      "pending": "Pendente",
+      "paid": "Pago",
+      "overdue": "Em Atraso"
     }
   },
   "periods": {
@@ -364,7 +417,8 @@
       "delete": "Cartão excluído com sucesso!"
     },
     "confirm": {
-      "delete": "Tem certeza que deseja excluir este cartão?"
+      "delete": "Tem certeza que deseja desativar este cartão?",
+      "deleteHard": "ATENÇÃO: Isso excluirá PERMANENTEMENTE o cartão e TODAS as transações relacionadas. Tem certeza?"
     },
     "loading": "Carregando..."
   },

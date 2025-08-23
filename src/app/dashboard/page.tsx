@@ -8,6 +8,7 @@ import { ExpensesByCategory } from "@/components/widgets/ExpensesByCategory";
 import { GoalsProgress } from "@/components/widgets/GoalsProgress";
 import { BudgetVsActual } from "@/components/widgets/BudgetVsActual";
 import { FinancialKPIs } from "@/components/widgets/FinancialKPIs";
+import { FixedCosts } from "@/components/widgets/FixedCosts";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import CurrencyDropdown from "@/components/CurrencyDropdown";
@@ -95,10 +96,15 @@ export default function DashboardPage() {
           <CoachWidget />
         </div>
         
-        {/* Quarta linha - Orçamento vs Realizado e Transações Recentes */}
+        {/* Quarta linha - Orçamento vs Realizado e Custos Fixos */}
         <div className="grid grid-cols-12 gap-4 md:gap-6">
           <BudgetVsActual />
-          <div className="col-span-12 lg:col-span-6">
+          <FixedCosts />
+        </div>
+        
+        {/* Quinta linha - Transações Recentes */}
+        <div className="grid grid-cols-12 gap-4 md:gap-6">
+          <div className="col-span-12">
             <RecentTransactions />
           </div>
         </div>

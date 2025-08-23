@@ -13,6 +13,14 @@ export async function POST(request: NextRequest) {
 
   const { transactions, target, receipts } = await request.json()
 
+  console.log('PDF Confirm - Dados recebidos:', { 
+    transactionsCount: transactions?.length, 
+    target, 
+    receiptsCount: receipts?.length,
+    userId: user.id
+  })
+  console.log('PDF Confirm - Transações:', JSON.stringify(transactions, null, 2))
+
   if ((!transactions || !Array.isArray(transactions)) && !(target && String(target).startsWith('rec'))) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
     }
@@ -36,7 +44,9 @@ export async function POST(request: NextRequest) {
         .from('categories')
         .select('id, name')
 
+      console.log('PDF Confirm - Categorias encontradas:', categories?.length)
       const categoryMap = new Map(categories?.map(cat => [cat.name.toLowerCase(), cat.id]) || [])
+      console.log('PDF Confirm - Mapa de categorias:', Array.from(categoryMap.entries()))
 
       // Preparar transações para inserção
       const transactionsToInsert = transactions.map((transaction: any) => {
@@ -44,11 +54,25 @@ export async function POST(request: NextRequest) {
         let categoryId = null
         if (transaction.suggestedCategory) {
           const suggestedLower = String(transaction.suggestedCategory).toLowerCase()
-          for (const [catName, catId] of categoryMap.entries()) {
-            if (catName.includes(suggestedLower) || suggestedLower.includes(catName)) {
-              categoryId = catId
-              break
+          console.log('PDF Confirm - Procurando categoria:', suggestedLower)
+          
+          // Busca exata primeiro
+          if (categoryMap.has(suggestedLower)) {
+            categoryId = categoryMap.get(suggestedLower)
+            console.log('PDF Confirm - Categoria encontrada (exata):', categoryId)
+          } else {
+            // Busca parcial
+            for (const [catName, catId] of categoryMap.entries()) {
+              if (catName.includes(suggestedLower) || suggestedLower.includes(catName)) {
+                categoryId = catId
+                console.log('PDF Confirm - Categoria encontrada (parcial):', catName, '->', categoryId)
+                break
+              }
             }
+          }
+          
+          if (!categoryId) {
+            console.log('PDF Confirm - Categoria não encontrada para:', suggestedLower)
           }
         }
 
@@ -66,10 +90,14 @@ export async function POST(request: NextRequest) {
         }
       })
 
+      console.log('PDF Confirm - Transações preparadas para inserção:', JSON.stringify(transactionsToInsert, null, 2))
+
       const { data: insertedTransactions, error: insertError } = await supabase
         .from('transactions')
         .insert(transactionsToInsert)
         .select()
+
+      console.log('PDF Confirm - Resultado da inserção:', { insertedTransactions, insertError })
 
       if (insertError) {
         console.error('Erro ao inserir transações:', insertError)
