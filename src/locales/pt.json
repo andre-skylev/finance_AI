@@ -14,7 +14,8 @@
     "chat": "Chat IA",
   "language": "Idioma",
   "toggleMenu": "Alternar menu",
-  "receipts": "Recibos"
+  "receipts": "Recibos",
+  "budgets": "Orçamentos"
   },
   "creditCards": {
     "closingDay": "Dia Fechamento",
@@ -98,7 +99,9 @@
     "actual": "Realizado",
     "variances": "Variações",
     "noBudgetData": "Sem dados de orçamento",
-    "noBudgetDataDesc": "Configure orçamentos para ver comparações"
+  "noBudgetDataDesc": "Configure orçamentos para ver comparações",
+  "coach": "Sugestões inteligentes",
+  "noCoachTips": "Sem sugestões no momento"
   },
   "transactions": {
     "title": "Transações",
@@ -134,7 +137,9 @@
     "noGoals": "Nenhum objetivo encontrado",
     "createFirst": "Criar o seu primeiro objetivo!",
     "deleteConfirm": "Tem a certeza que deseja eliminar este objetivo?",
-    "currency": "Moeda"
+  "currency": "Moeda",
+  "perMonth": "por mês",
+  "month": "mês"
   },
   "fixedCosts": {
     "title": "Custos Fixos",

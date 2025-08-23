@@ -35,7 +35,7 @@ export default function GoalsPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setGoals(data || [])
+  setGoals(data || [])
     } catch (error) {
       console.error('Error fetching goals:', error)
     } finally {
@@ -117,6 +117,26 @@ export default function GoalsPage() {
             <h1 className="text-2xl font-semibold">{t('goals.title')}</h1>
             <p className="text-muted-foreground">{t('goals.subtitle')}</p>
           </div>
+          {/* Quick coach summary (simple MVP) */}
+          <div className="text-sm text-muted-foreground">
+            {goals.length > 0 && goals.map((g)=>{
+              const today = new Date()
+              const target = g.target_date ? new Date(g.target_date) : null
+              const monthsRemaining = target ? Math.max(1, (target.getFullYear()-today.getFullYear())*12 + (target.getMonth()-today.getMonth())) : null
+              const remaining = Math.max(0, Number(g.target_amount) - Number(g.current_amount||0))
+              const neededMonthly = monthsRemaining ? (remaining / monthsRemaining) : null
+              return (
+                <div key={g.id} className="flex items-center gap-2">
+                  <span className="font-medium">{g.name}</span>
+                  {neededMonthly !== null && (
+                    <span>
+                      • {t('goals.perMonth') || 'por mês'}: {new Intl.NumberFormat('pt-PT',{style:'currency',currency:g.currency}).format(neededMonthly)}
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
           <Button onClick={() => {
             setEditingGoal(null)
             setIsFormOpen(true)
@@ -140,9 +160,23 @@ export default function GoalsPage() {
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-          {goals.map((goal) => (
-            <GoalCard key={goal.id} goal={goal} onDelete={handleDelete} onEdit={handleEdit} />
-          ))}
+          {goals.map((goal) => {
+            const today = new Date()
+            const target = goal.target_date ? new Date(goal.target_date) : null
+            const monthsRemaining = target ? Math.max(1, (target.getFullYear()-today.getFullYear())*12 + (target.getMonth()-today.getMonth())) : null
+            const remaining = Math.max(0, Number(goal.target_amount) - Number(goal.current_amount||0))
+            const neededMonthly = monthsRemaining ? (remaining / monthsRemaining) : null
+            return (
+              <div key={goal.id} className="relative">
+                {neededMonthly !== null && (
+                  <div className={`absolute right-2 top-2 text-xs px-2 py-0.5 rounded ${neededMonthly<=0?'bg-green-100 text-green-700':'bg-amber-100 text-amber-700'}`}>
+                    {new Intl.NumberFormat('pt-PT',{style:'currency',currency:goal.currency}).format(neededMonthly)} / {t('goals.month')||'mês'}
+                  </div>
+                )}
+                <GoalCard goal={goal} onDelete={handleDelete} onEdit={handleEdit} />
+              </div>
+            )
+          })}
         </div>
 
         {goals.length === 0 && (

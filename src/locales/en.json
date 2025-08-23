@@ -14,7 +14,8 @@
     "chat": "AI Chat",
     "language": "Language",
     "toggleMenu": "Toggle menu",
-    "receipts": "Receipts"
+  "receipts": "Receipts",
+  "budgets": "Budgets"
   },
   "creditCards": {
     "closingDay": "Closing Day",
@@ -97,7 +98,9 @@
     "actual": "Actual",
     "variances": "Variances",
     "noBudgetData": "No budget data",
-    "noBudgetDataDesc": "Set up budgets to see comparisons"
+  "noBudgetDataDesc": "Set up budgets to see comparisons",
+  "coach": "Smart suggestions",
+  "noCoachTips": "No suggestions right now"
   },
   "transactions": {
     "title": "Transactions",
@@ -133,7 +136,9 @@
     "noGoals": "No goals found",
     "createFirst": "Create your first goal!",
     "deleteConfirm": "Are you sure you want to delete this goal?",
-    "currency": "Currency"
+  "currency": "Currency",
+  "perMonth": "per month",
+  "month": "month"
   },
   "fixedCosts": {
     "title": "Fixed Costs",
