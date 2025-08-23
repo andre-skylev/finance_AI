@@ -414,16 +414,17 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
           </button>
 
           {showDetails ? (
-            <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+            <div className="space-y-4 p-3 sm:p-4 bg-gray-50 rounded-lg">
               {/* Items Section */}
               <div className="space-y-3">
-                <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between">
                   <Label>Itens</Label>
                   <Button
                     type="button"
                     onClick={handleAddItem}
                     size="sm"
-                    variant="outline"
+          variant="outline"
+          className="border-primary text-primary hover:bg-primary/5"
                   >
                     <Plus className="h-3 w-3 mr-1" />
                     Adicionar Item
@@ -554,7 +555,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               </div>
 
               {/* Calculated Total */}
-              <div className="p-3 bg-white rounded-lg border">
+              <div className="p-3 sm:p-4 bg-white rounded-lg border">
                 <div className="space-y-2">
                   {items.length > 0 && (
                     <>

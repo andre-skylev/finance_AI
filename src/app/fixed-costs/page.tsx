@@ -216,7 +216,7 @@ export default function FixedCostsPage() {
 
   return (
     <ProtectedRoute>
-      <div className="space-y-6">
+  <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{t('fixedCosts.title')}</h1>
@@ -233,7 +233,7 @@ export default function FixedCostsPage() {
         </div>
 
         {/* Summary Card */}
-        <div className="bg-white p-6 rounded-lg shadow">
+  <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-medium text-gray-900">{t('fixedCosts.totalMonthly')}</h3>
@@ -252,7 +252,7 @@ export default function FixedCostsPage() {
 
         {/* Add Form */}
         {showForm && (
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-white p-4 sm:p-6 rounded-lg shadow">
             <h2 className="text-lg font-medium mb-4">{t('fixedCosts.newCost')}</h2>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -373,11 +373,11 @@ export default function FixedCostsPage() {
         )}
 
         {/* Fixed Costs List */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="bg-white rounded-lg shadow overflow-hidden">
           {fixedCosts.length > 0 ? (
-            <div className="divide-y divide-gray-200">
+      <div className="divide-y divide-gray-200">
               {fixedCosts.map((fixedCost) => (
-                <div key={fixedCost.id} className={`p-6 ${!fixedCost.is_active ? 'opacity-50' : ''}`}>
+        <div key={fixedCost.id} className={`p-4 sm:p-6 ${!fixedCost.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center space-x-3">

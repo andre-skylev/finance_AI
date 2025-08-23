@@ -109,7 +109,7 @@ export default function FixedIncomesPage() {
 
   return (
     <ProtectedRoute>
-      <div className="space-y-6">
+  <div className="space-y-4 sm:space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold text-gray-900">{t('fixedIncomes.title')}</h1>
@@ -121,7 +121,7 @@ export default function FixedIncomesPage() {
           </button>
         </div>
 
-        <div className="bg-white p-6 rounded-lg border">
+  <div className="bg-white p-4 sm:p-6 rounded-lg border">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-medium text-gray-900">{t('fixedIncomes.totalMonthly')}</h3>
@@ -133,7 +133,7 @@ export default function FixedIncomesPage() {
         </div>
 
         {showForm && (
-          <div className="bg-white p-6 rounded-lg border">
+          <div className="bg-white p-4 sm:p-6 rounded-lg border">
             <h2 className="text-lg font-medium mb-4">{t('fixedIncomes.newIncome')}</h2>
             <form onSubmit={submit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -190,7 +190,7 @@ export default function FixedIncomesPage() {
           ) : (
             <div className="divide-y">
               {items.map(i => (
-                <div key={i.id} className={`p-6 ${!i.is_active ? 'opacity-50' : ''}`}>
+                <div key={i.id} className={`p-4 sm:p-6 ${!i.is_active ? 'opacity-50' : ''}`}>
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
