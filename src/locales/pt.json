@@ -54,6 +54,7 @@
     "edit": "Editar",
     "delete": "Eliminar",
     "search": "Pesquisar",
+  "select": "Selecionar",
     "yes": "Sim",
     "no": "Não",
     "close": "Fechar",
@@ -269,6 +270,175 @@
     "available": "Disponível"
   }
   ,
+  "installments": {
+    "title": "Parcelamentos",
+    "subtitle": "Gerencie suas compras parceladas",
+    "stats": {
+      "active": "Parcelamentos Ativos",
+      "remaining": "Valor Restante",
+      "totalGroups": "Total de Grupos"
+    },
+    "filters": {
+      "all": "Todos",
+      "active": "Ativos",
+      "completed": "Concluídos"
+    },
+    "labels": {
+      "progress": "Progresso",
+      "installment": "Prestação",
+      "perInstallment": "Valor por prestação",
+      "remainingAmount": "Valor restante",
+      "nextPayment": "Próximo pagamento",
+      "details": "Ver detalhes das prestações",
+      "completed": "Concluído",
+      "inProgress": "Em andamento",
+      "noneFound": "Nenhum parcelamento encontrado",
+      "noActive": "Não há parcelamentos ativos no momento.",
+      "noCompleted": "Não há parcelamentos concluídos.",
+      "importHint": "Importe uma fatura de cartão de crédito para ver os parcelamentos."
+    },
+    "loading": "Carregando parcelamentos..."
+  },
+  "creditCardsPage": {
+    "title": "Cartões de Crédito",
+    "subtitle": "Gerencie seus cartões de crédito e débito",
+    "showBalances": "Mostrar Saldos",
+    "hideBalances": "Ocultar Saldos",
+    "addCard": "Adicionar Cartão",
+    "addFirstCard": "Adicionar Primeiro Cartão",
+    "addCardDialog": {
+      "title": "Adicionar Cartão",
+      "description": "Adicione um novo cartão de crédito ou débito",
+      "placeholders": {
+        "cardName": "ex: Cartão Principal",
+        "bankName": "ex: Millennium BCP",
+        "last4": "1234",
+        "limit": "5000",
+        "closingDay": "15",
+        "dueDay": "25",
+        "notes": "Observações adicionais"
+      }
+    },
+    "labels": {
+      "cardName": "Nome do Cartão",
+      "bank": "Banco",
+      "brand": "Bandeira",
+      "last4": "Últimos 4 dígitos",
+      "type": "Tipo",
+      "currency": "Moeda",
+      "creditLimit": "Limite de Crédito",
+      "closingDay": "Dia de Fechamento",
+      "dueDay": "Dia de Vencimento",
+      "notes": "Observações",
+      "creditCard": "Cartão de Crédito",
+      "debitCard": "Cartão de Débito",
+      "inactiveCard": "Cartão Inativo",
+      "utilization": "Utilização",
+      "balance": "Saldo Atual"
+    },
+    "types": {
+      "credit": "Crédito",
+      "debit": "Débito"
+    },
+    "buttons": {
+      "update": "Atualizar Cartão",
+      "add": "Adicionar Cartão",
+      "viewMovements": "Ver Movimentos",
+      "importPdf": "Importar PDF"
+    },
+    "empty": {
+      "title": "Nenhum cartão cadastrado",
+      "desc": "Adicione seus cartões de crédito e débito para ter controle total das suas finanças"
+    },
+    "errors": {
+      "load": "Erro ao carregar cartões de crédito",
+      "add": "Erro ao adicionar cartão",
+      "update": "Erro ao atualizar cartão",
+      "delete": "Erro ao excluir cartão"
+    },
+    "success": {
+      "add": "Cartão adicionado com sucesso!",
+      "update": "Cartão atualizado com sucesso!",
+      "delete": "Cartão excluído com sucesso!"
+    },
+    "confirm": {
+      "delete": "Tem certeza que deseja excluir este cartão?"
+    },
+    "loading": "Carregando..."
+  },
+  "importPage": {
+    "uploadTitle": "Importar de extrato PDF",
+    "uploadDesc": "Poupe tempo importando múltiplas transações de uma só vez.",
+    "clickToSelect": "Clique para selecionar um arquivo PDF",
+    "orAddManually": "OU ADICIONE MANUALMENTE",
+    "success": "Transações importadas com sucesso!",
+    "error": "Erro ao salvar transações:",
+    "progress": {
+      "start": "Iniciando upload...",
+      "uploaded": "Arquivo enviado, aguardando processamento...",
+      "extracting": "Servidor está extraindo o texto do PDF...",
+      "analyzing": "Analisando transações com Inteligência Artificial...",
+      "finishing": "Finalizando e organizando os dados...",
+      "done": "Processo concluído!"
+    }
+  },
+  "home": {
+    "title": "Como usar a plataforma",
+    "subtitle": "Siga os passos abaixo para começar e tirar o máximo proveito do FinanceAI.",
+    "steps": {
+      "1": {
+        "title": "1) Crie suas contas",
+        "desc": "Vá até Contas e adicione contas (corrente, poupança, cartão). Ao definir o saldo inicial, ele é lançado como entrada automaticamente. Você pode ocultar saldos com o ‘olhinho’."
+      },
+      "2": {
+        "title": "2) Importe extratos, faturas e recibos",
+        "desc": "Use o importador diretamente nas páginas da Conta e do Cartão de Crédito para extratos/faturas. Para recibos, use a página Recibos. Também há uma página ‘Importar PDF’. A IA detecta o tipo e extrai transações/itens."
+      },
+      "3": {
+        "title": "3) Revise e confirme",
+        "desc": "Confira as transações sugeridas, ajuste categorias e associe à conta correta antes de salvar."
+      },
+      "4": {
+        "title": "4) Acompanhe no Dashboard e defina metas",
+        "desc": "Veja saldos, fluxo de caixa, gastos por categoria e configure objetivos financeiros."
+      }
+    },
+    "features": {
+      "assistant": {
+        "title": "Assistente IA",
+        "desc": "Faça perguntas em linguagem natural e obtenha insights das suas finanças."
+      },
+      "receipts": {
+        "title": "Recibos inteligentes",
+        "desc": "Extração avançada de itens com código e imposto, inclusive tabela dinâmica quando disponível."
+      },
+      "security": {
+        "title": "Segurança e privacidade",
+        "desc": "Autenticação segura e regras de acesso por usuário nos seus dados."
+      }
+    },
+    "transactions": {
+      "title": "Transações: o que são e como adicionar",
+      "importPdf": "PDF (extrato/fatura)",
+      "importPdfDesc": "Importe direto pela página da Conta/Cartão ou use a página ‘Importar PDF’. A plataforma detecta o tipo e extrai as transações automaticamente.",
+      "photo": "Foto (recibos)",
+      "photoDesc": "Use a câmara para digitalizar recibos; os itens e totais podem virar transações associadas.",
+      "manual": "Manual",
+      "manualDesc": "Adicione manualmente em Transações > Adicionar, útil para lançamentos pontuais.",
+      "typesDesc": "Tipos: Entrada (receita), Saída (despesa) e Transferência (entre contas). Diferenciar entradas e saídas permite análises precisas de fluxo de caixa e metas de poupança."
+    },
+    "ctas": {
+      "accounts": "Ir para Contas",
+      "dashboard": "Abrir Dashboard",
+      "addTransaction": "Adicionar Transação (manual)",
+      "receipts": "Abrir Recibos"
+    }
+  },
+  "transactionForm": {
+    "items": "Itens",
+    "addItem": "Adicionar Item"
+  }
+  ,
   "categoriesPage": {
     "title": "Categorias",
     "subtitle": "Configure categorias padrão e crie categorias personalizadas",
@@ -421,5 +591,25 @@
       "uploaded": "Ficheiro carregado com sucesso",
       "processed": "Documento processado com sucesso"
     }
+  }
+  ,
+  "accountsPage": {
+    "title": "Movimentações da Conta",
+    "back": "Voltar às Contas",
+    "importPdf": "Importar PDF",
+    "addMovement": "Adicionar Movimentação",
+    "balance": "Saldo",
+    "none": "Nenhuma movimentação encontrada",
+    "date": "Data",
+    "description": "Descrição",
+    "amount": "Valor",
+    "type": "Tipo",
+    "expense": "Saída",
+    "income": "Entrada",
+    "save": "Salvar",
+    "category": "Categoria",
+    "selectCategory": "Selecione uma categoria",
+    "loading": "Carregando...",
+    "error": "Erro ao carregar dados"
   }
 }

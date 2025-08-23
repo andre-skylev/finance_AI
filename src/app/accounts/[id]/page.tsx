@@ -34,7 +34,7 @@ type Account = {
 
 export default function AccountMovementsPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
-  const { language } = useLanguage()
+  const { language, t: T } = useLanguage()
   const { user } = useAuth()
   const router = useRouter()
   const supabase = createClient()
@@ -64,24 +64,24 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
   })
 
   const t = useMemo(() => ({
-    title: language === 'pt' ? 'Movimentações da Conta' : 'Account Movements',
-    back: language === 'pt' ? 'Voltar às Contas' : 'Back to Accounts',
-    importPdf: language === 'pt' ? 'Importar PDF' : 'Import PDF',
-    addMovement: language === 'pt' ? 'Adicionar Movimentação' : 'Add Movement',
-    balance: language === 'pt' ? 'Saldo' : 'Balance',
-    none: language === 'pt' ? 'Nenhuma movimentação encontrada' : 'No movements found',
-    date: language === 'pt' ? 'Data' : 'Date',
-    desc: language === 'pt' ? 'Descrição' : 'Description',
-    amount: language === 'pt' ? 'Valor' : 'Amount',
-    type: language === 'pt' ? 'Tipo' : 'Type',
-    expense: language === 'pt' ? 'Saída' : 'Expense',
-    income: language === 'pt' ? 'Entrada' : 'Income',
-  save: language === 'pt' ? 'Salvar' : 'Save',
-  category: language === 'pt' ? 'Categoria' : 'Category',
-  selectCategory: language === 'pt' ? 'Selecione uma categoria' : 'Select a category',
-    loading: language === 'pt' ? 'Carregando...' : 'Loading...',
-    error: language === 'pt' ? 'Erro ao carregar dados' : 'Failed to load data'
-  }), [language])
+    title: T('accountsPage.title'),
+    back: T('accountsPage.back'),
+    importPdf: T('accountsPage.importPdf'),
+    addMovement: T('accountsPage.addMovement'),
+    balance: T('accountsPage.balance'),
+    none: T('accountsPage.none'),
+    date: T('accountsPage.date'),
+    desc: T('accountsPage.description'),
+    amount: T('accountsPage.amount'),
+    type: T('accountsPage.type'),
+    expense: T('accountsPage.expense'),
+    income: T('accountsPage.income'),
+    save: T('accountsPage.save'),
+    category: T('accountsPage.category'),
+    selectCategory: T('accountsPage.selectCategory'),
+    loading: T('accountsPage.loading'),
+    error: T('accountsPage.error')
+  }), [T])
 
   useEffect(() => {
     if (!user) return

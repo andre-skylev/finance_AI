@@ -85,8 +85,8 @@ export default function CreditCardsPage() {
       if (error) throw error
       setCreditCards(data || [])
     } catch (error) {
-      console.error('Erro ao carregar cartões:', error)
-      alert('Erro ao carregar cartões de crédito')
+      console.error(t('creditCardsPage.errors.load') + ':', error)
+      alert(t('creditCardsPage.errors.load'))
     } finally {
       setLoading(false)
     }
@@ -95,7 +95,7 @@ export default function CreditCardsPage() {
   const handleAddCard = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) throw new Error('Usuário não autenticado')
+  if (!user) throw new Error('auth')
 
       const cardData = {
         ...newCard,
@@ -109,13 +109,13 @@ export default function CreditCardsPage() {
 
       if (error) throw error
 
-      alert('Cartão adicionado com sucesso!')
+  alert(t('creditCardsPage.success.add'))
       setIsAddDialogOpen(false)
       resetForm()
       fetchCreditCards()
     } catch (error) {
-      console.error('Erro ao adicionar cartão:', error)
-      alert('Erro ao adicionar cartão')
+      console.error(t('creditCardsPage.errors.add') + ':', error)
+      alert(t('creditCardsPage.errors.add'))
     }
   }
 
@@ -130,18 +130,18 @@ export default function CreditCardsPage() {
 
       if (error) throw error
 
-      alert('Cartão atualizado com sucesso!')
+  alert(t('creditCardsPage.success.update'))
       setEditingCard(null)
       resetForm()
       fetchCreditCards()
     } catch (error) {
-      console.error('Erro ao atualizar cartão:', error)
-      alert('Erro ao atualizar cartão')
+      console.error(t('creditCardsPage.errors.update') + ':', error)
+      alert(t('creditCardsPage.errors.update'))
     }
   }
 
   const handleDeleteCard = async (cardId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este cartão?')) return
+  if (!confirm(t('creditCardsPage.confirm.delete'))) return
 
     try {
       const { error } = await supabase
@@ -151,11 +151,11 @@ export default function CreditCardsPage() {
 
       if (error) throw error
 
-      alert('Cartão excluído com sucesso!')
+  alert(t('creditCardsPage.success.delete'))
       fetchCreditCards()
     } catch (error) {
-      console.error('Erro ao excluir cartão:', error)
-      alert('Erro ao excluir cartão')
+      console.error(t('creditCardsPage.errors.delete') + ':', error)
+      alert(t('creditCardsPage.errors.delete'))
     }
   }
 
@@ -223,8 +223,8 @@ export default function CreditCardsPage() {
     <div className="p-6 space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-2xl font-bold">Cartões de Crédito</h1>
-          <p className="text-gray-600">Gerencie seus cartões de crédito e débito</p>
+          <h1 className="text-2xl font-bold">{t('creditCardsPage.title')}</h1>
+          <p className="text-gray-600">{t('creditCardsPage.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <Button
@@ -233,51 +233,51 @@ export default function CreditCardsPage() {
             className="flex items-center gap-2"
           >
             {showBalances ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-            {showBalances ? 'Ocultar' : 'Mostrar'} Saldos
+            {showBalances ? t('creditCardsPage.hideBalances') : t('creditCardsPage.showBalances')}
           </Button>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
             <DialogTrigger asChild>
               <Button className="flex items-center gap-2">
                 <Plus className="h-4 w-4" />
-                Adicionar Cartão
+                {t('creditCardsPage.addCard')}
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Adicionar Cartão</DialogTitle>
+                <DialogTitle>{t('creditCardsPage.addCardDialog.title')}</DialogTitle>
                 <DialogDescription>
-                  Adicione um novo cartão de crédito ou débito
+                  {t('creditCardsPage.addCardDialog.description')}
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
-                  <Label htmlFor="card_name">Nome do Cartão</Label>
+                  <Label htmlFor="card_name">{t('creditCardsPage.labels.cardName')}</Label>
                   <Input
                     id="card_name"
                     value={newCard.card_name}
                     onChange={(e) => setNewCard({ ...newCard, card_name: e.target.value })}
-                    placeholder="ex: Cartão Principal"
+                    placeholder={t('creditCardsPage.addCardDialog.placeholders.cardName')}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="bank_name">Banco</Label>
+                  <Label htmlFor="bank_name">{t('creditCardsPage.labels.bank')}</Label>
                   <Input
                     id="bank_name"
                     value={newCard.bank_name}
                     onChange={(e) => setNewCard({ ...newCard, bank_name: e.target.value })}
-                    placeholder="ex: Millennium BCP"
+                    placeholder={t('creditCardsPage.addCardDialog.placeholders.bankName')}
                   />
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label htmlFor="card_brand">Bandeira</Label>
+                    <Label htmlFor="card_brand">{t('creditCardsPage.labels.brand')}</Label>
                     <select
                       id="card_brand"
                       value={newCard.card_brand}
                       onChange={(e) => setNewCard({ ...newCard, card_brand: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     >
-                      <option value="">Selecione</option>
+                      <option value="">{t('common.select') || 'Select'}</option>
                       <option value="visa">Visa</option>
                       <option value="mastercard">Mastercard</option>
                       <option value="american express">American Express</option>
@@ -285,31 +285,31 @@ export default function CreditCardsPage() {
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="last_four_digits">Últimos 4 dígitos</Label>
+                    <Label htmlFor="last_four_digits">{t('creditCardsPage.labels.last4')}</Label>
                     <Input
                       id="last_four_digits"
                       value={newCard.last_four_digits}
                       onChange={(e) => setNewCard({ ...newCard, last_four_digits: e.target.value })}
-                      placeholder="1234"
+                      placeholder={t('creditCardsPage.addCardDialog.placeholders.last4')}
                       maxLength={4}
                     />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <Label htmlFor="card_type">Tipo</Label>
+                    <Label htmlFor="card_type">{t('creditCardsPage.labels.type')}</Label>
                     <select
                       id="card_type"
                       value={newCard.card_type}
                       onChange={(e) => setNewCard({ ...newCard, card_type: e.target.value as 'credit' | 'debit' })}
                       className="w-full px-3 py-2 border border-gray-300 rounded-md"
                     >
-                      <option value="credit">Crédito</option>
-                      <option value="debit">Débito</option>
+                      <option value="credit">{t('creditCardsPage.types.credit')}</option>
+                      <option value="debit">{t('creditCardsPage.types.debit')}</option>
                     </select>
                   </div>
                   <div>
-                    <Label htmlFor="currency">Moeda</Label>
+                    <Label htmlFor="currency">{t('creditCardsPage.labels.currency')}</Label>
                     <select
                       id="currency"
                       value={newCard.currency}
@@ -324,18 +324,18 @@ export default function CreditCardsPage() {
                 {newCard.card_type === 'credit' && (
                   <>
                     <div>
-                      <Label htmlFor="credit_limit">Limite de Crédito</Label>
+                      <Label htmlFor="credit_limit">{t('creditCardsPage.labels.creditLimit')}</Label>
                       <Input
                         id="credit_limit"
                         type="number"
                         value={newCard.credit_limit || ''}
                         onChange={(e) => setNewCard({ ...newCard, credit_limit: e.target.value ? Number(e.target.value) : undefined })}
-                        placeholder="5000"
+                        placeholder={t('creditCardsPage.addCardDialog.placeholders.limit')}
                       />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label htmlFor="closing_day">{t('creditCards.closingDay')}</Label>
+                        <Label htmlFor="closing_day">{t('creditCardsPage.labels.closingDay')}</Label>
                         <Input
                           id="closing_day"
                           type="number"
@@ -343,11 +343,11 @@ export default function CreditCardsPage() {
                           max="31"
                           value={newCard.closing_day || ''}
                           onChange={(e) => setNewCard({ ...newCard, closing_day: e.target.value ? Number(e.target.value) : undefined })}
-                          placeholder="15"
+                          placeholder={t('creditCardsPage.addCardDialog.placeholders.closingDay')}
                         />
                       </div>
                       <div>
-                        <Label htmlFor="due_day">{t('creditCards.dueDay')}</Label>
+                        <Label htmlFor="due_day">{t('creditCardsPage.labels.dueDay')}</Label>
                         <Input
                           id="due_day"
                           type="number"
@@ -355,23 +355,23 @@ export default function CreditCardsPage() {
                           max="31"
                           value={newCard.due_day || ''}
                           onChange={(e) => setNewCard({ ...newCard, due_day: e.target.value ? Number(e.target.value) : undefined })}
-                          placeholder="25"
+                          placeholder={t('creditCardsPage.addCardDialog.placeholders.dueDay')}
                         />
                       </div>
                     </div>
                   </>
                 )}
                 <div>
-                  <Label htmlFor="notes">Observações</Label>
+                  <Label htmlFor="notes">{t('creditCardsPage.labels.notes')}</Label>
                   <Input
                     id="notes"
                     value={newCard.notes}
                     onChange={(e) => setNewCard({ ...newCard, notes: e.target.value })}
-                    placeholder="Observações adicionais"
+                    placeholder={t('creditCardsPage.addCardDialog.placeholders.notes')}
                   />
                 </div>
                 <Button onClick={editingCard ? handleUpdateCard : handleAddCard} className="w-full">
-                  {editingCard ? 'Atualizar' : 'Adicionar'} Cartão
+                  {editingCard ? t('creditCardsPage.buttons.update') : t('creditCardsPage.buttons.add')}
                 </Button>
               </div>
             </DialogContent>
@@ -384,14 +384,14 @@ export default function CreditCardsPage() {
           <CardContent className="flex flex-col items-center justify-center py-12">
             <CreditCard className="h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Nenhum cartão cadastrado
+              {t('creditCardsPage.empty.title')}
             </h3>
             <p className="text-gray-600 text-center mb-4">
-              Adicione seus cartões de crédito e débito para ter controle total das suas finanças
+              {t('creditCardsPage.empty.desc')}
             </p>
             <Button onClick={() => setIsAddDialogOpen(true)} className="flex items-center gap-2">
               <Plus className="h-4 w-4" />
-              Adicionar Primeiro Cartão
+              {t('creditCardsPage.addFirstCard')}
             </Button>
           </CardContent>
         </Card>
@@ -449,9 +449,9 @@ export default function CreditCardsPage() {
               <CardContent className="space-y-3">
                 {card.card_type === 'credit' && (
                   <>
-                    <div className="space-y-1">
+          <div className="space-y-1">
                       <div className="flex justify-between text-sm">
-                        <span>Limite de Crédito</span>
+            <span>{t('creditCardsPage.labels.creditLimit')}</span>
                         <span className="font-medium">
                           {showBalances && card.credit_limit 
                             ? formatCurrency(card.credit_limit, card.currency)
@@ -460,7 +460,7 @@ export default function CreditCardsPage() {
                         </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span>Saldo Atual</span>
+            <span>{t('creditCardsPage.labels.balance')}</span>
                         <span className="font-medium">
                           {showBalances 
                             ? formatCurrency(card.current_balance, card.currency)
@@ -471,7 +471,7 @@ export default function CreditCardsPage() {
                       {card.credit_limit && (
                         <div className="space-y-1">
                           <div className="flex justify-between text-sm">
-                            <span>Utilização</span>
+                            <span>{t('creditCardsPage.labels.utilization')}</span>
                             <span className={`font-medium ${getUtilizationColor(getUtilizationPercentage(card.current_balance, card.credit_limit))}`}>
                               {showBalances ? `${getUtilizationPercentage(card.current_balance, card.credit_limit)}%` : '•••'}
                             </span>
@@ -500,13 +500,13 @@ export default function CreditCardsPage() {
                         <div className="grid grid-cols-2 gap-2 text-sm">
               {card.closing_day && (
                             <div>
-                <span className="text-gray-600">{t('creditCards.closingDay')}:</span>
+                <span className="text-gray-600">{t('creditCardsPage.labels.closingDay')}:</span>
                               <div className="font-medium">{card.closing_day}</div>
                             </div>
                           )}
               {card.due_day && (
                             <div>
-                <span className="text-gray-600">{t('creditCards.dueDay')}:</span>
+                <span className="text-gray-600">{t('creditCardsPage.labels.dueDay')}:</span>
                               <div className="font-medium">{card.due_day}</div>
                             </div>
                           )}
@@ -516,18 +516,18 @@ export default function CreditCardsPage() {
                   </>
                 )}
                 
-                {card.card_type === 'debit' && (
+        {card.card_type === 'debit' && (
                   <div className="space-y-1">
                     <div className="flex justify-between text-sm">
-                      <span>Tipo</span>
-                      <span className="font-medium">Cartão de Débito</span>
+          <span>{t('creditCardsPage.labels.type')}</span>
+          <span className="font-medium">{t('creditCardsPage.labels.debitCard')}</span>
                     </div>
                   </div>
                 )}
                 
-                {!card.is_active && (
+        {!card.is_active && (
                   <div className="pt-2 border-t">
-                    <span className="text-sm text-red-600 font-medium">Cartão Inativo</span>
+        <span className="text-sm text-red-600 font-medium">{t('creditCardsPage.labels.inactiveCard')}</span>
                   </div>
                 )}
 
@@ -537,14 +537,14 @@ export default function CreditCardsPage() {
                     size="sm"
                     onClick={() => router.push(`/credit-cards/${card.id}`)}
                   >
-                    Ver Movimentos
+                    {t('creditCardsPage.buttons.viewMovements')}
                   </Button>
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => router.push(`/pdf-import?credit_card_id=${card.id}`)}
                   >
-                    Importar PDF
+                    {t('creditCardsPage.buttons.importPdf')}
                   </Button>
                 </div>
               </CardContent>

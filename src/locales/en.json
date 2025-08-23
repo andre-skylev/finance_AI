@@ -54,6 +54,7 @@
     "edit": "Edit",
     "delete": "Delete",
     "search": "Search",
+  "select": "Select",
     "yes": "Yes",
     "no": "No",
     "close": "Close",
@@ -265,6 +266,174 @@
     "limit": "Limit",
     "available": "Available"
   },
+  "installments": {
+    "title": "Installments",
+    "subtitle": "Manage your installment purchases",
+    "stats": {
+      "active": "Active Installments",
+      "remaining": "Remaining Amount",
+      "totalGroups": "Total Groups"
+    },
+    "filters": {
+      "all": "All",
+      "active": "Active",
+      "completed": "Completed"
+    },
+    "labels": {
+      "progress": "Progress",
+      "installment": "Installment",
+      "perInstallment": "Amount per installment",
+      "remainingAmount": "Remaining amount",
+      "nextPayment": "Next payment",
+      "details": "View installment details",
+      "completed": "Completed",
+      "inProgress": "In progress",
+      "noneFound": "No installments found",
+      "noActive": "There are no active installments right now.",
+      "noCompleted": "There are no completed installments.",
+      "importHint": "Import a credit card invoice to see installments."
+    },
+    "loading": "Loading installments..."
+  },
+  "creditCardsPage": {
+    "title": "Credit Cards",
+    "subtitle": "Manage your credit and debit cards",
+    "showBalances": "Show Balances",
+    "hideBalances": "Hide Balances",
+    "addCard": "Add Card",
+    "addFirstCard": "Add First Card",
+    "addCardDialog": {
+      "title": "Add Card",
+      "description": "Add a new credit or debit card",
+      "placeholders": {
+        "cardName": "e.g., Main Card",
+        "bankName": "e.g., Millennium BCP",
+        "last4": "1234",
+        "limit": "5000",
+        "closingDay": "15",
+        "dueDay": "25",
+        "notes": "Additional notes"
+      }
+    },
+    "labels": {
+      "cardName": "Card Name",
+      "bank": "Bank",
+      "brand": "Brand",
+      "last4": "Last 4 digits",
+      "type": "Type",
+      "currency": "Currency",
+      "creditLimit": "Credit Limit",
+      "closingDay": "Closing Day",
+      "dueDay": "Due Day",
+      "notes": "Notes",
+      "creditCard": "Credit Card",
+      "debitCard": "Debit Card",
+      "inactiveCard": "Inactive Card",
+      "utilization": "Utilization",
+      "balance": "Current Balance"
+    },
+    "types": {
+      "credit": "Credit",
+      "debit": "Debit"
+    },
+    "buttons": {
+      "update": "Update Card",
+      "add": "Add Card",
+      "viewMovements": "View Movements",
+      "importPdf": "Import PDF"
+    },
+    "empty": {
+      "title": "No cards yet",
+      "desc": "Add your credit and debit cards to fully control your finances"
+    },
+    "errors": {
+      "load": "Error loading credit cards",
+      "add": "Error adding card",
+      "update": "Error updating card",
+      "delete": "Error deleting card"
+    },
+    "success": {
+      "add": "Card added successfully!",
+      "update": "Card updated successfully!",
+      "delete": "Card deleted successfully!"
+    },
+    "confirm": {
+      "delete": "Are you sure you want to delete this card?"
+    },
+    "loading": "Loading..."
+  },
+  "importPage": {
+    "uploadTitle": "Import from PDF statement",
+    "uploadDesc": "Save time by importing multiple transactions at once.",
+    "clickToSelect": "Click to select a PDF file",
+    "orAddManually": "OR ADD MANUALLY",
+    "success": "Transactions imported successfully!",
+    "error": "Error saving transactions:",
+    "progress": {
+      "start": "Starting upload...",
+      "uploaded": "File sent, waiting for processing...",
+      "extracting": "Server is extracting text from the PDF...",
+      "analyzing": "Analyzing transactions with Artificial Intelligence...",
+      "finishing": "Finalizing and organizing data...",
+      "done": "Process completed!"
+    }
+  },
+  "home": {
+    "title": "How to use the platform",
+    "subtitle": "Follow the steps below to get started and make the most of FinanceAI.",
+    "steps": {
+      "1": {
+        "title": "1) Create your accounts",
+        "desc": "Go to Accounts and add accounts (checking, savings, credit card). When you set an initial balance, it’s recorded as an income entry automatically. You can hide balances with the eye icon."
+      },
+      "2": {
+        "title": "2) Import statements, invoices, and receipts",
+        "desc": "Use the importer directly in each Account and Credit Card page for statements/invoices. For receipts, use the Receipts page. There’s also a standalone ‘Import PDF’ page. AI detects the type and extracts transactions/items."
+      },
+      "3": {
+        "title": "3) Review and confirm",
+        "desc": "Review suggested transactions, adjust categories, and link to the right account before saving."
+      },
+      "4": {
+        "title": "4) Track on the Dashboard and set goals",
+        "desc": "See balances, cash flow, expenses by category, and set financial goals."
+      }
+    },
+    "features": {
+      "assistant": {
+        "title": "AI Assistant",
+        "desc": "Ask questions in natural language and get insights from your finances."
+      },
+      "receipts": {
+        "title": "Smart receipts",
+        "desc": "Advanced item extraction with code and tax, including dynamic tables when available."
+      },
+      "security": {
+        "title": "Security & privacy",
+        "desc": "Secure auth and user-level access rules on your data."
+      }
+    },
+    "transactions": {
+      "title": "Transactions: what they are and how to add",
+      "importPdf": "PDF (statement/invoice)",
+      "importPdfDesc": "Import directly from the Account/Card page or use the ‘Import PDF’ page. The platform detects the type and extracts transactions automatically.",
+      "photo": "Photo (receipts)",
+      "photoDesc": "Use the camera to scan receipts; items and totals can become linked transactions.",
+      "manual": "Manual",
+      "manualDesc": "Add manually in Transactions > Add, useful for one-off entries.",
+      "typesDesc": "Types: Income, Expense, and Transfer (between accounts). Distinguishing income and expenses enables accurate cash flow analysis and savings goals."
+    },
+    "ctas": {
+      "accounts": "Go to Accounts",
+      "dashboard": "Open Dashboard",
+      "addTransaction": "Add Transaction (manual)",
+      "receipts": "Open Receipts"
+    }
+  },
+  "transactionForm": {
+    "items": "Items",
+    "addItem": "Add Item"
+  },
   "categoriesPage": {
     "title": "Categories",
     "subtitle": "Use default categories and create custom ones",
@@ -416,5 +585,25 @@
       "uploaded": "File uploaded successfully",
       "processed": "Document processed successfully"
     }
+  }
+  ,
+  "accountsPage": {
+    "title": "Account Movements",
+    "back": "Back to Accounts",
+    "importPdf": "Import PDF",
+    "addMovement": "Add Movement",
+    "balance": "Balance",
+    "none": "No movements found",
+    "date": "Date",
+    "description": "Description",
+    "amount": "Amount",
+    "type": "Type",
+    "expense": "Expense",
+    "income": "Income",
+    "save": "Save",
+    "category": "Category",
+    "selectCategory": "Select a category",
+    "loading": "Loading...",
+    "error": "Failed to load data"
   }
 }
