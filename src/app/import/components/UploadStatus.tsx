@@ -2,6 +2,7 @@
 
 import { Progress } from "@/components/ui/progress"
 import { Loader2, CheckCircle } from "lucide-react"
+import { useLanguage } from '@/contexts/LanguageContext'
 
 interface StatusEvent {
   message: string
@@ -14,9 +15,11 @@ interface UploadStatusProps {
 }
 
 export function UploadStatus({ events, progress }: UploadStatusProps) {
+  const { t } = useLanguage()
+  
   return (
     <div className="w-full max-w-md rounded-lg border bg-card p-6 text-card-foreground shadow-sm">
-      <h3 className="mb-4 text-lg font-semibold">Processando seu extrato...</h3>
+      <h3 className="mb-4 text-lg font-semibold">{t('uploadStatus.processingTitle')}</h3>
       <Progress value={progress} className="mb-4" />
       <div className="max-h-48 space-y-2 overflow-y-auto text-sm text-muted-foreground">
         {events.filter(Boolean).map((event, index) => (
@@ -34,7 +37,7 @@ export function UploadStatus({ events, progress }: UploadStatusProps) {
       </div>
       {progress < 100 && (
         <p className="mt-4 text-xs text-center text-muted-foreground">
-          Por favor, não feche esta janela. O processo pode levar até um minuto.
+          {t('uploadStatus.pleaseWait')}
         </p>
       )}
     </div>

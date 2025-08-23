@@ -633,9 +633,8 @@
   "taxPercent": "Imposto %",
     "total": "Total",
     "useCamera": "Usar Câmara",
-    "useGallery": "Escolher da Galeria",
-    "startingCamera": "A iniciar câmara...",
     "chooseFile": "Escolher Ficheiro",
+    "startingCamera": "A iniciar câmara...",
     "preview": "Pré-visualização",
     "replace": "Substituir",
     "retake": "Repetir Foto",
@@ -722,5 +721,9 @@
     "selectCategory": "Selecione uma categoria",
     "loading": "Carregando...",
     "error": "Erro ao carregar dados"
+  },
+  "uploadStatus": {
+    "processingTitle": "Processando seu extrato...",
+    "pleaseWait": "Por favor, não feche esta janela. O processo pode levar até um minuto."
   }
 }

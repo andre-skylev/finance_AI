@@ -187,7 +187,7 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button onClick={toggleHide} className="inline-flex items-center gap-2 px-3 py-2 rounded-md border hover:bg-gray-50">
             {hideBalance ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             <span className="hidden sm:inline">{t.balance}</span>

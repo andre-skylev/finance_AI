@@ -266,7 +266,8 @@ export default function AccountsPage() {
                     if (!confirmingDelete) return
                     try {
                       setDeleteLoading(true)
-                      await fetch(`/api/accounts?id=${confirmingDelete.id}`, { method: 'DELETE' })
+                      // Use hard delete to remove account and all related transactions
+                      await fetch(`/api/accounts?id=${confirmingDelete.id}&hard=true`, { method: 'DELETE' })
                       setConfirmingDelete(null)
                       await refetch()
                     } finally {

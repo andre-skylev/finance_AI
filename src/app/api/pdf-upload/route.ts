@@ -345,6 +345,7 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
     let isReceiptMode = false
     let parsingMethod = 'document-ai-fallback'
     let openAIResult: any = null
+    let receipts: any[] = []
 
     // 🤖 Tentar parsing com OpenAI se habilitado
     if (useOpenAI) {
@@ -405,6 +406,22 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
             quantity: item.quantity,
             unitPrice: item.unitPrice
           }))
+          
+          // Criar dados do recibo para salvar separadamente
+          receipts = [{
+            merchant: openAIResult.establishment?.name || 'Estabelecimento',
+            date: openAIResult.date || new Date().toISOString().split('T')[0],
+            subtotal: openAIResult.totalAmount ? openAIResult.totalAmount * 0.9 : null, // Estimativa sem impostos
+            tax: openAIResult.totalAmount ? openAIResult.totalAmount * 0.1 : null, // Estimativa de impostos
+            total: openAIResult.totalAmount,
+            items: openAIResult.items.map((item: any) => ({
+              description: item.description || 'Item',
+              quantity: item.quantity,
+              unitPrice: item.unitPrice,
+              total: item.totalPrice,
+              code: item.code || null
+            }))
+          }]
         } else if (openAIResult.totalAmount && openAIResult.totalAmount > 0) {
           // Fallback: transação única se não há detalhes
           transactions = [{
@@ -453,7 +470,8 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
           start: documentDate,
           end: documentDate
         },
-        transactions: transactions
+        transactions: transactions,
+        receipts: receipts
       },
       accounts: [],
       creditCards: [],

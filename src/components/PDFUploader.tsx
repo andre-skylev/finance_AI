@@ -696,7 +696,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                 className="flex items-center justify-center px-6 py-4 bg-white text-gray-900 rounded-xl hover:bg-gray-50 transition-all border border-gray-200"
               >
                 <Upload className="h-4 w-4 mr-2" />
-                {t('pdfUploader.useGallery')}
+                {t('pdfUploader.chooseFile')}
               </button>
             </div>
             {/* Input para câmera */}
@@ -748,7 +748,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                     className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                   >
                     <Upload className="h-3 w-3 mr-1" />
-                    {t('pdfUploader.useGallery')}
+                    {t('pdfUploader.chooseFile')}
                   </button>
                   <button
                     type="button"

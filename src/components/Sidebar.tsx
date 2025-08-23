@@ -51,7 +51,6 @@ function useNavGroups(): NavGroup[] {
     {
       title: t("navGroup.documents") || "Documentos",
       items: [
-        { href: "/pdf-import", icon: FileText, label: t("navigation.import") + " PDF" },
         { href: "/receipts", icon: ReceiptText, label: t("navigation.receipts") || "Recibos" },
       ],
     },

@@ -104,9 +104,9 @@ export function useAccounts() {
     }
   }
 
-  const deleteAccount = async (id: string) => {
+  const deleteAccount = async (id: string, hardDelete = true) => {
     try {
-      const response = await fetch(`/api/accounts?id=${id}`, {
+      const response = await fetch(`/api/accounts?id=${id}${hardDelete ? '&hard=true' : ''}`, {
         method: 'DELETE'
       })
       

@@ -194,30 +194,32 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 						{hideBalance ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
 						<span className="hidden sm:inline">{t.balance}</span>
 					</button>
+					<div className="flex items-center gap-4 flex-wrap">
+						{card && (
+							<div className="text-xl font-semibold">
+								{hideBalance ? '••••••' : formatCurrency(card.current_balance, card.currency)}
+							</div>
+						)}
+						{typeof card?.credit_limit === 'number' && (
+							<div className="text-sm text-gray-600">
+								{t.limit}: {hideBalance ? '•••••' : formatCurrency(card.credit_limit!, card.currency)}
+								{typeof availableLimit === 'number' && (
+									<span className="ml-3">• {t.available}: {hideBalance ? '•••••' : formatCurrency(availableLimit, card!.currency)}</span>
+								)}
+							</div>
+						)}
+					</div>
 					{card && (
-						<div className="text-xl font-semibold">
-							{hideBalance ? '••••••' : formatCurrency(card.current_balance, card.currency)}
-						</div>
-					)}
-					{typeof card?.credit_limit === 'number' && (
-						<div className="ml-2 text-sm text-gray-600">
-							{t.limit}: {hideBalance ? '•••••' : formatCurrency(card.credit_limit!, card.currency)}
-							{typeof availableLimit === 'number' && (
-								<span className="ml-3">• {t.available}: {hideBalance ? '•••••' : formatCurrency(availableLimit, card!.currency)}</span>
-							)}
-						</div>
-					)}
-								{card && (
-									<div className="ml-auto">
-										<PDFUploader onSuccess={async () => {
-											const { data: txs } = await supabase
-												.from('credit_card_transactions')
-												.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
-												.eq('user_id', user!.id)
-												.eq('credit_card_id', card.id)
-												.order('transaction_date', { ascending: false })
-											setMovements((txs || []) as any)
-											const { data: c } = await supabase
+						<div className="ml-auto">
+							<PDFUploader onSuccess={async () => {
+								const { data: txs } = await supabase
+									.from('credit_card_transactions')
+									.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
+									.eq('user_id', user!.id)
+									.eq('credit_card_id', card.id)
+									.order('transaction_date', { ascending: false })
+								setMovements((txs || []) as any)
+								const { data: c } = await supabase
 												.from('credit_cards')
 												.select('id, card_name, bank_name, currency, credit_limit, current_balance')
 												.eq('id', card.id)

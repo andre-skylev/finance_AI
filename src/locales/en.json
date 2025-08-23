@@ -629,9 +629,8 @@
     "taxPercent": "Tax %",
     "total": "Total",
     "useCamera": "Use Camera",
-    "useGallery": "Choose from Gallery",
-    "startingCamera": "Starting camera...",
     "chooseFile": "Choose File",
+    "startingCamera": "Starting camera...",
     "preview": "Preview",
     "replace": "Replace",
     "retake": "Retake",
@@ -718,5 +717,9 @@
     "selectCategory": "Select a category",
     "loading": "Loading...",
     "error": "Failed to load data"
+  },
+  "uploadStatus": {
+    "processingTitle": "Processing your statement...",
+    "pleaseWait": "Please don't close this window. The process may take up to a minute."
   }
 }
