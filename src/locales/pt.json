@@ -259,7 +259,9 @@
     "cardRecognitionHint": "Quando a fatura contiver dados do cartão, você pode criar o cartão manualmente.",
     "addCard": "Adicionar Cartão",
     "addCardTodo": "Adicionar Cartão (a implementar)",
-    "noCardDetected": "Nenhum cartão reconhecido ainda"
+  "noCardDetected": "Nenhum cartão reconhecido ainda",
+  "guideTitle": "Como funciona a importação",
+  "guideDesc": "Carregue um PDF (ou use a câmara) e a IA identifica as transações automaticamente. Depois selecione o destino e confirme."
   },
   "card": {
     "holder": "Titular",
@@ -479,6 +481,32 @@
       "salario": "Salário",
       "freelance": "Freelance",
       "reembolsos": "Reembolsos"
+    },
+    "subcategories": {
+      "supermercado": {
+        "cestaBasica": "Cesta Básica",
+        "higieneELimpeza": "Higiene e Limpeza",
+        "superfluos": "Supérfluos",
+        "bebidas": "Bebidas",
+        "padaria": "Padaria",
+        "acougue": "Açougue",
+        "frutasEVerduras": "Frutas e Verduras",
+        "congelados": "Congelados",
+        "petiscos": "Petiscos"
+      },
+      "transporte": {
+        "combustivel": "Combustível",
+        "manutencao": "Manutenção",
+        "estacionamento": "Estacionamento",
+        "pedagio": "Pedágio",
+        "transportePublico": "Transporte Público"
+      },
+      "saude": {
+        "medicamentos": "Medicamentos",
+        "consultas": "Consultas",
+        "exames": "Exames",
+        "seguroSaude": "Seguro Saúde"
+      }
     }
   },
   "receipts": {
@@ -575,6 +603,7 @@
     "tryAgain": "Tentar novamente",
     "flashlightOn": "Ligar flash",
     "flashlightOff": "Desligar flash",
+    "scanReceipt": "Digitalizar Documento",
     "errors": {
       "fileTypeNotSupported": "Tipo de ficheiro não suportado",
       "fileTooLarge": "Ficheiro demasiado grande (máx. 10MB)",
@@ -585,11 +614,38 @@
       "cameraNotSupported": "Câmara não suportada neste dispositivo",
       "cameraAccessDenied": "Acesso à câmara negado",
       "noCameraFound": "Nenhuma câmara encontrada",
-      "cameraAccessFailed": "Falha ao aceder à câmara"
+      "cameraAccessFailed": "Falha ao aceder à câmara",
+      "selectTargetRequired": "Selecione uma conta ou cartão para prosseguir",
+      "errorSavingTransactions": "Erro ao salvar transações",
+      "errorConfirmingTransactions": "Erro ao confirmar transações"
     },
     "success": {
       "uploaded": "Ficheiro carregado com sucesso",
       "processed": "Documento processado com sucesso"
+    },
+    "optgroups": {
+      "accounts": "Contas Bancárias",
+      "creditCards": "Cartões de Crédito"
+    },
+    "addTransaction": "Adicionar Transação",
+    "actions": "Ações",
+    "selectCategory": "Selecionar categoria...",
+    "table": {
+      "description": "Descrição",
+      "category": "Categoria"
+    },
+    "progress": {
+      "preparing": "Preparando upload...",
+      "uploading": "Enviando arquivo...",
+      "processing": "Processando documento...",
+      "analyzing": "Analisando dados extraídos...",
+      "completed": "Processamento concluído!",
+      "stepsCompleted": "Etapas concluídas:",
+      "tip1": "Aguarde! Estamos analisando o seu documento...",
+      "tip2": "Ótimo progresso! A IA está extraindo dados das transações...",
+      "tip3": "Quase terminando! Organizando os seus dados financeiros...",
+      "tip4": "Sucesso! O seu documento foi processado!",
+      "remaining": "restantes"
     }
   }
   ,

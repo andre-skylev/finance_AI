@@ -256,7 +256,9 @@
     "cardRecognitionHint": "When the invoice contains card data, you can create the card manually.",
     "addCard": "Add Card",
     "addCardTodo": "Add Card (to implement)",
-    "noCardDetected": "No card recognized yet"
+  "noCardDetected": "No card recognized yet",
+  "guideTitle": "How the import works",
+  "guideDesc": "Upload a PDF (or use the camera) and AI will identify transactions automatically. Then select the destination and confirm."
   },
   "card": {
     "holder": "Holder",
@@ -473,6 +475,32 @@
       "salario": "Salary",
       "freelance": "Freelance",
       "reembolsos": "Reimbursements"
+    },
+    "subcategories": {
+      "supermercado": {
+        "cestaBasica": "Basic Groceries",
+        "higieneELimpeza": "Hygiene & Cleaning", 
+        "superfluos": "Non-essentials",
+        "bebidas": "Beverages",
+        "padaria": "Bakery",
+        "acougue": "Butcher",
+        "frutasEVerduras": "Fruits & Vegetables",
+        "congelados": "Frozen Foods",
+        "petiscos": "Snacks"
+      },
+      "transporte": {
+        "combustivel": "Fuel",
+        "manutencao": "Maintenance",
+        "estacionamento": "Parking",
+        "pedagio": "Tolls",
+        "transportePublico": "Public Transport"
+      },
+      "saude": {
+        "medicamentos": "Medications",
+        "consultas": "Consultations",
+        "exames": "Medical Tests",
+        "seguroSaude": "Health Insurance"
+      }
     }
   },
   "receipts": {
@@ -569,6 +597,7 @@
     "tryAgain": "Try again",
     "flashlightOn": "Turn flashlight on",
     "flashlightOff": "Turn flashlight off",
+    "scanReceipt": "Scan Document",
     "errors": {
       "fileTypeNotSupported": "File type not supported",
       "fileTooLarge": "File too large (max 10MB)",
@@ -579,11 +608,38 @@
       "cameraNotSupported": "Camera not supported on this device",
       "cameraAccessDenied": "Camera access denied",
       "noCameraFound": "No camera found",
-      "cameraAccessFailed": "Failed to access the camera"
+      "cameraAccessFailed": "Failed to access the camera",
+      "selectTargetRequired": "Select a destination account or card to continue",
+      "errorSavingTransactions": "Error saving transactions",
+      "errorConfirmingTransactions": "Error confirming transactions"
     },
     "success": {
       "uploaded": "File uploaded successfully",
       "processed": "Document processed successfully"
+    },
+    "optgroups": {
+      "accounts": "Bank Accounts",
+      "creditCards": "Credit Cards"
+    },
+    "addTransaction": "Add Transaction",
+    "actions": "Actions",
+    "selectCategory": "Select category...",
+    "table": {
+      "description": "Description",
+      "category": "Category"
+    },
+    "progress": {
+      "preparing": "Preparing upload...",
+      "uploading": "Uploading file...", 
+      "processing": "Processing document...",
+      "analyzing": "Analyzing extracted data...",
+      "completed": "Processing completed!",
+      "stepsCompleted": "Steps completed:",
+      "tip1": "Hang tight! We're analyzing your document...",
+      "tip2": "Great progress! AI is extracting transaction data...",
+      "tip3": "Almost done! Organizing your financial data...",
+      "tip4": "Success! Your document has been processed!",
+      "remaining": "remaining"
     }
   }
   ,

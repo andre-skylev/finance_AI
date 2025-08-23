@@ -76,8 +76,8 @@ function PDFImportContent() {
             {/* Simple guidance box when nothing extracted yet */}
             {!lastImport && (
               <div className="bg-white p-6 rounded-lg shadow border border-gray-100">
-                <h3 className="text-base font-semibold mb-1">Como funciona a importação</h3>
-                <p className="text-sm text-gray-600">Carregue um PDF (ou use a câmara) e a IA identifica as transações automaticamente. Depois selecione a conta e confirme.</p>
+                <h3 className="text-base font-semibold mb-1">{t('pdfImport.guideTitle')}</h3>
+                <p className="text-sm text-gray-600">{t('pdfImport.guideDesc')}</p>
               </div>
             )}
 

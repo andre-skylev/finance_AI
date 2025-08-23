@@ -51,7 +51,7 @@ export default function ReceiptsPage() {
 }
 
 function ReceiptsList() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [loading, setLoading] = React.useState(true)
   const [receipts, setReceipts] = React.useState<any[]>([])
   const [error, setError] = React.useState<string>('')
@@ -150,7 +150,7 @@ function ReceiptsList() {
                     {r.merchant_name || t('receipts.unknownMerchant')}
                   </h3>
                   <span className="text-xs text-gray-400">
-                    {r.receipt_date ? new Date(r.receipt_date).toLocaleDateString('pt-PT', { 
+                    {r.receipt_date ? new Date(r.receipt_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { 
                       month: 'short', 
                       day: 'numeric',
                       year: 'numeric'
@@ -159,16 +159,16 @@ function ReceiptsList() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500">
                   {typeof r.subtotal === 'number' && (
-                    <span>{t('receipts.subtotal')} {formatCurrency(r.subtotal)}</span>
+                    <span>{t('receipts.subtotal')} {formatCurrency(r.subtotal, language)}</span>
                   )}
                   {typeof r.tax === 'number' && r.tax > 0 && (
-                    <span>{t('receipts.tax')} {formatCurrency(r.tax)}</span>
+                    <span>{t('receipts.tax')} {formatCurrency(r.tax, language)}</span>
                   )}
                 </div>
               </div>
               <div className="text-right ml-4">
                 <div className="text-sm sm:text-base font-semibold text-gray-900">
-                  {formatCurrency(r.total)}
+                  {formatCurrency(r.total, language)}
                 </div>
               </div>
             </div>
@@ -179,9 +179,10 @@ function ReceiptsList() {
   )
 }
 
-function formatCurrency(v?: number) {
+function formatCurrency(v?: number, lang?: 'pt' | 'en') {
   if (typeof v !== 'number') return '—'
-  return new Intl.NumberFormat('pt-PT', { 
+  const loc = lang === 'pt' ? 'pt-PT' : 'en-US'
+  return new Intl.NumberFormat(loc, { 
     style: 'currency', 
     currency: 'EUR',
     minimumFractionDigits: 2,

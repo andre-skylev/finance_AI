@@ -18,7 +18,7 @@ interface ExtractedData {
     start: string
     end: string
   }
-  transactions: Transaction[]
+  transactions?: Transaction[]
   receipts?: Array<{
     merchant?: string
     date?: string
@@ -53,7 +53,7 @@ interface PDFUploaderProps {
 }
 
 export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTarget }: PDFUploaderProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -64,6 +64,19 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
   const [isConfirming, setIsConfirming] = useState(false)
   const [error, setError] = useState<string>('')
   const [success, setSuccess] = useState<string>('')
+  
+  // Estados para edição de transações
+  const [editableTransactions, setEditableTransactions] = useState<Transaction[]>([])
+  const [isEditing, setIsEditing] = useState(false)
+  const [editingIndex, setEditingIndex] = useState<number>(-1)
+  
+  // Estados para progresso do upload
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [progressSteps, setProgressSteps] = useState<string[]>([])
+  const [currentStep, setCurrentStep] = useState('')
+  const [estimatedTimeRemaining, setEstimatedTimeRemaining] = useState<number | null>(null)
+  const [processingStartTime, setProcessingStartTime] = useState<number | null>(null)
+  
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
@@ -76,6 +89,13 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
   const streamRef = useRef<MediaStream | null>(null)
 
   // Document type is auto-detected server-side; no selection UI
+
+  // Inicializar transações editáveis quando extractedData muda
+  useEffect(() => {
+    if (extractedData?.transactions) {
+      setEditableTransactions([...extractedData.transactions])
+    }
+  }, [extractedData])
 
   useEffect(() => {
     return () => {
@@ -136,7 +156,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
       if (selectedFile.type.startsWith('image/')) {
         try { f = await compressImageIfNeeded(selectedFile) } catch {}
       } else if (selectedFile.type !== 'application/pdf') {
-        setError(t('pdfUploader.errors.unsupportedFormat'))
+        setError(t('pdfUploader.errors.fileTypeNotSupported'))
         return
       }
       setFile(f)
@@ -298,26 +318,64 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
 
     setIsUploading(true)
     setError('')
+    setSuccess('')
+    setUploadProgress(0)
+    setProgressSteps([])
+    setCurrentStep('')
+    setEstimatedTimeRemaining(null)
+    setProcessingStartTime(null)
 
     try {
-  const formData = new FormData()
+      // Passo 1: Preparando upload
+      updateProgress(t('pdfUploader.progress.preparing'), 5)
+      await new Promise(resolve => setTimeout(resolve, 500))
+      
+      const formData = new FormData()
       formData.append('file', file)
       // Enable server-side auto-detection
       formData.append('auto', '1')
-  const response = await fetch('/api/pdf-upload', {
+      
+      // Passo 2: Enviando arquivo
+      updateProgress(t('pdfUploader.progress.uploading'), 15)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+      
+      // Passo 3: Iniciando processamento
+      updateProgress(t('pdfUploader.progress.processing'), 25)
+      setProcessingStartTime(Date.now())
+
+      const startTime = Date.now()
+      
+      // Simular progresso durante o processamento real
+      const progressInterval = setInterval(() => {
+        const elapsed = Date.now() - startTime
+        const estimatedTotal = 60000 // 60 segundos estimados
+        const serverProgress = Math.min(90, 25 + (elapsed / estimatedTotal) * 65) // 25% a 90%
+        updateProgress(t('pdfUploader.progress.processing'), Math.floor(serverProgress))
+      }, 2000)
+
+      const response = await fetch('/api/pdf-upload', {
         method: 'POST',
         body: formData,
       })
 
-  const result = await response.json()
+      clearInterval(progressInterval)
+
+      const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro ao processar PDF')
+        throw new Error(result.error || t('pdfUploader.errors.processingFailed'))
       }
 
-  setExtractedData(result.data)
+      // Passo 4: Analisando dados
+      updateProgress(t('pdfUploader.progress.analyzing'), 95)
+      await new Promise(resolve => setTimeout(resolve, 1000))
+
+      setExtractedData(result.data)
       setAccounts(result.accounts)
       setCreditCards(result.creditCards || [])
+      
+      // Passo 5: Concluído
+      updateProgress(t('pdfUploader.progress.completed'), 100)
       setSuccess(result.message)
 
       // Notify listeners (pdf-import page) with full result for card recognition UI
@@ -325,16 +383,25 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
         window.dispatchEvent(new CustomEvent('pdf-import:success', { detail: result }))
       } catch {}
     } catch (err: any) {
-      setError(err.message || 'Erro ao processar arquivo')
+      setError(err.message || t('pdfUploader.errors.processingFailed'))
+      setUploadProgress(0)
+      setCurrentStep('')
     } finally {
-      setIsUploading(false)
+      setTimeout(() => {
+        setIsUploading(false)
+        if (!error) {
+          setUploadProgress(0)
+          setCurrentStep('')
+          setProgressSteps([])
+        }
+      }, 2000) // Keep progress visible for 2 seconds after completion
     }
   }
 
   const handleConfirm = async () => {
-  const target = forcedTarget || selectedTarget
-  if (!extractedData || !target) {
-      setError('Selecione uma conta para prosseguir')
+    const target = forcedTarget || selectedTarget
+    if (!extractedData || !target) {
+      setError(t('pdfUploader.errors.selectTargetRequired'))
       return
     }
 
@@ -348,7 +415,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          transactions: extractedData.transactions,
+          transactions: editableTransactions || [],
           target, // acc:ID | cc:ID | rec
           receipts: extractedData.receipts || [],
         }),
@@ -357,10 +424,10 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
       const result = await response.json()
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro ao salvar transações')
+        throw new Error(result.error || t('pdfUploader.errors.errorSavingTransactions'))
       }
 
-  setSuccess(result.message)
+      setSuccess(result.message)
       setExtractedData(null)
       setFile(null)
   if (!forcedTarget) setSelectedTarget('')
@@ -373,21 +440,218 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
         onSuccess()
       }
     } catch (err: any) {
-      setError(err.message || 'Erro ao confirmar transações')
+      setError(err.message || t('pdfUploader.errors.errorConfirmingTransactions'))
     } finally {
       setIsConfirming(false)
     }
   }
 
+  // Funções para edição de transações
+  const startEditing = (index: number) => {
+    setEditingIndex(index)
+    setIsEditing(true)
+  }
+
+  const cancelEditing = () => {
+    setEditingIndex(-1)
+    setIsEditing(false)
+    // Restaurar valores originais
+    if (extractedData?.transactions) {
+      setEditableTransactions([...extractedData.transactions])
+    }
+  }
+
+  const saveEdit = (index: number, updatedTransaction: Transaction) => {
+    const newTransactions = [...editableTransactions]
+    newTransactions[index] = updatedTransaction
+    setEditableTransactions(newTransactions)
+    setEditingIndex(-1)
+    setIsEditing(false)
+  }
+
+  const addNewTransaction = () => {
+    const newTransaction: Transaction = {
+      date: new Date().toISOString().split('T')[0],
+      description: '',
+      amount: 0,
+      suggestedCategory: '',
+    }
+    setEditableTransactions([...editableTransactions, newTransaction])
+    setEditingIndex(editableTransactions.length)
+    setIsEditing(true)
+  }
+
+  const deleteTransaction = (index: number) => {
+    const newTransactions = editableTransactions.filter((_, i) => i !== index)
+    setEditableTransactions(newTransactions)
+  }
+
+  // Função para obter todas as categorias incluindo subcategorias
+  const getAllCategories = () => {
+    const mainCategories = [
+      t('categories.defaults.alimentacao'),
+      t('categories.defaults.supermercado'), 
+      t('categories.defaults.transporte'),
+      t('categories.defaults.habitacao'),
+      t('categories.defaults.servicosPublicos'),
+      t('categories.defaults.saude'),
+      t('categories.defaults.educacao'),
+      t('categories.defaults.lazer'),
+      t('categories.defaults.viagens'),
+      t('categories.defaults.compras'),
+      t('categories.defaults.assinaturas'),
+      t('categories.defaults.impostos'),
+      t('categories.defaults.taxas'),
+      t('categories.defaults.seguros'),
+      t('categories.defaults.pets'),
+      t('categories.defaults.presentes'),
+      t('categories.defaults.doacoes'),
+      t('categories.defaults.investimentos'),
+      t('categories.defaults.outros'),
+      t('categories.defaults.salario'),
+      t('categories.defaults.freelance'),
+      t('categories.defaults.reembolsos')
+    ]
+
+    const subcategories = [
+      // Subcategorias de Supermercado
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.cestaBasica')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.higieneELimpeza')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.superfluos')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.bebidas')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.padaria')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.acougue')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.frutasEVerduras')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.congelados')}`,
+      `${t('categories.defaults.supermercado')} - ${t('categories.subcategories.supermercado.petiscos')}`,
+      
+      // Subcategorias de Transporte
+      `${t('categories.defaults.transporte')} - ${t('categories.subcategories.transporte.combustivel')}`,
+      `${t('categories.defaults.transporte')} - ${t('categories.subcategories.transporte.manutencao')}`,
+      `${t('categories.defaults.transporte')} - ${t('categories.subcategories.transporte.estacionamento')}`,
+      `${t('categories.defaults.transporte')} - ${t('categories.subcategories.transporte.pedagio')}`,
+      `${t('categories.defaults.transporte')} - ${t('categories.subcategories.transporte.transportePublico')}`,
+      
+      // Subcategorias de Saúde
+      `${t('categories.defaults.saude')} - ${t('categories.subcategories.saude.medicamentos')}`,
+      `${t('categories.defaults.saude')} - ${t('categories.subcategories.saude.consultas')}`,
+      `${t('categories.defaults.saude')} - ${t('categories.subcategories.saude.exames')}`,
+      `${t('categories.defaults.saude')} - ${t('categories.subcategories.saude.seguroSaude')}`
+    ]
+
+    return [...mainCategories, ...subcategories].sort()
+  }
+
+  const calculateTotal = () => {
+    return editableTransactions.reduce((sum, transaction) => sum + Math.abs(transaction.amount), 0)
+  }
+
+  // This function is replaced by getAllCategories() which includes hierarchical subcategories
+
+  // Função para atualizar progresso
+  const updateProgress = (step: string, progress: number) => {
+    setCurrentStep(step)
+    setUploadProgress(progress)
+    setProgressSteps(prev => {
+      if (!prev.includes(step)) {
+        return [...prev, step]
+      }
+      return prev
+    })
+
+    // Calculate estimated time remaining during processing
+    if (processingStartTime && progress > 25 && progress < 95) {
+      const elapsed = Date.now() - processingStartTime
+      const estimatedTotal = (elapsed / (progress - 25)) * (95 - 25) // Estimate based on processing phase
+      const remaining = Math.max(0, estimatedTotal - elapsed)
+      setEstimatedTimeRemaining(Math.ceil(remaining / 1000)) // Convert to seconds
+    } else {
+      setEstimatedTimeRemaining(null)
+    }
+  }
+
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('pt-PT', {
+    const loc = language === 'pt' ? 'pt-PT' : 'en-US'
+    return new Intl.NumberFormat(loc, {
       style: 'currency',
       currency: 'EUR',
     }).format(amount)
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-PT')
+    const loc = language === 'pt' ? 'pt-PT' : 'en-US'
+    return new Date(dateString).toLocaleDateString(loc)
+  }
+
+  // Componente para editar uma transação
+  const TransactionEditRow = ({ transaction, index, onSave, onCancel }: {
+    transaction: Transaction
+    index: number
+    onSave: (updatedTransaction: Transaction) => void
+    onCancel: () => void
+  }) => {
+    const [editForm, setEditForm] = useState(transaction)
+
+    return (
+      <tr className="bg-blue-50 border border-blue-200">
+        <td className="px-4 py-2">
+          <input
+            type="date"
+            value={editForm.date}
+            onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+            className="w-full px-2 py-1 border rounded text-sm"
+          />
+        </td>
+        <td className="px-4 py-2">
+          <input
+            type="text"
+            value={editForm.description}
+            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+            className="w-full px-2 py-1 border rounded text-sm"
+            placeholder={t('pdfUploader.table.description')}
+          />
+        </td>
+        <td className="px-4 py-2">
+          <input
+            type="number"
+            step="0.01"
+            value={editForm.amount}
+            onChange={(e) => setEditForm({ ...editForm, amount: parseFloat(e.target.value) || 0 })}
+            className="w-full px-2 py-1 border rounded text-sm"
+          />
+        </td>
+        <td className="px-4 py-2">
+          <select
+            value={editForm.suggestedCategory}
+            onChange={(e) => setEditForm({ ...editForm, suggestedCategory: e.target.value })}
+            className="w-full px-2 py-1 border rounded text-sm bg-white"
+          >
+            <option value="">{t('pdfUploader.selectCategory') || 'Select category...'}</option>
+            {getAllCategories().map((category: string) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </td>
+        <td className="px-4 py-2 space-x-2">
+          <button
+            onClick={() => onSave(editForm)}
+            className="px-2 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600"
+            title={t('common.save')}
+          >
+            Save
+          </button>
+          <button
+            onClick={onCancel}
+            className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+            title={t('common.cancel')}
+          >
+            Cancel
+          </button>
+        </td>
+      </tr>
+    )
   }
 
   return (
@@ -494,6 +758,66 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
             </div>
           )}
 
+          {/* Progress Bar */}
+          {isUploading && (
+            <div className="mt-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="mb-3">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="text-sm font-medium text-gray-700">
+                    {currentStep}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-sm text-gray-500">
+                      {uploadProgress}%
+                    </span>
+                    {estimatedTimeRemaining && estimatedTimeRemaining > 5 && (
+                      <div className="text-xs text-gray-400">
+                        ~{estimatedTimeRemaining}s {t('pdfUploader.progress.remaining')}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2">
+                  <div 
+                    className="bg-blue-600 h-2 rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${uploadProgress}%` }}
+                  ></div>
+                </div>
+              </div>
+              
+              {/* Steps completed */}
+              {progressSteps.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs text-gray-500 mb-2">
+                    {t('pdfUploader.progress.stepsCompleted')}
+                  </p>
+                  {progressSteps.map((step, index) => (
+                    <div key={index} className="flex items-center text-xs text-gray-600">
+                      <CheckCircle className="h-3 w-3 text-green-500 mr-2 flex-shrink-0" />
+                      <span>{step}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {/* Encouraging messages */}
+              <div className="mt-3 p-2 bg-blue-50 rounded text-xs text-blue-700">
+                {uploadProgress < 30 && (
+                  <span>{t('pdfUploader.progress.tip1')}</span>
+                )}
+                {uploadProgress >= 30 && uploadProgress < 70 && (
+                  <span>{t('pdfUploader.progress.tip2')}</span>
+                )}
+                {uploadProgress >= 70 && uploadProgress < 100 && (
+                  <span>{t('pdfUploader.progress.tip3')}</span>
+                )}
+                {uploadProgress === 100 && (
+                  <span>{t('pdfUploader.progress.tip4')}</span>
+                )}
+              </div>
+            </div>
+          )}
+
           {success && (
             <div className="mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center text-gray-700">
               <CheckCircle className="h-4 w-4 mr-2" />
@@ -540,7 +864,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                 >
                   <option value="">{t('pdfUploader.selectAccountPlaceholder')}</option>
                   {accounts.length > 0 && (
-                    <optgroup label="Contas Bancárias">
+                    <optgroup label={t('pdfUploader.optgroups.accounts')}>
                       {accounts.map((account) => (
                         <option key={`acc:${account.id}`} value={`acc:${account.id}`}>
                           {account.name} ({account.type})
@@ -549,7 +873,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                     </optgroup>
                   )}
                   {creditCards.length > 0 && (
-                    <optgroup label="Cartões de Crédito">
+                    <optgroup label={t('pdfUploader.optgroups.creditCards')}>
                       {creditCards.map((cc) => (
                         <option key={`cc:${cc.id}`} value={`cc:${cc.id}`}>
                           {cc.bank_name} {cc.card_name}{cc.last_four_digits ? ` •••• ${cc.last_four_digits}` : ''}
@@ -563,35 +887,80 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
 
               {/* Transactions Table */}
               <div>
-    <h4 className="text-md font-medium mb-3">{t('pdfUploader.transactionsFound')} ({extractedData.transactions.length})</h4>
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-md font-medium">
+                    {t('pdfUploader.transactionsFound')} ({editableTransactions.length})
+                  </h4>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={addNewTransaction}
+                      className="px-3 py-1 bg-green-500 text-white rounded text-sm hover:bg-green-600"
+                      disabled={isEditing}
+                    >
+                      + {t('pdfUploader.addTransaction')}
+                    </button>
+                    <div className="px-3 py-1 bg-gray-100 rounded text-sm font-medium">
+                      Total: {formatCurrency(calculateTotal())}
+                    </div>
+                  </div>
+                </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-200">
-      <th className="text-left py-2 px-3">{t('pdfUploader.date')}</th>
-      <th className="text-left py-2 px-3">{t('pdfUploader.description')}</th>
-      <th className="text-right py-2 px-3">{t('pdfUploader.amount')}</th>
-      <th className="text-left py-2 px-3">{t('pdfUploader.suggestedCategory')}</th>
+                        <th className="text-left py-2 px-3">{t('pdfUploader.date')}</th>
+                        <th className="text-left py-2 px-3">{t('pdfUploader.description')}</th>
+                        <th className="text-right py-2 px-3">{t('pdfUploader.amount')}</th>
+                        <th className="text-left py-2 px-3">{t('pdfUploader.suggestedCategory')}</th>
+                        <th className="text-center py-2 px-3">{t('pdfUploader.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {extractedData.transactions.map((transaction, index) => (
-                        <tr key={index} className="border-b border-gray-100">
-                          <td className="py-2 px-3">{formatDate(transaction.date)}</td>
-                          <td className="py-2 px-3">{transaction.description}</td>
-                          <td
-                            className={`py-2 px-3 text-right font-medium ${
-                              transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
-                            }`}
-                          >
-                            {formatCurrency(transaction.amount)}
-                          </td>
-                          <td className="py-2 px-3">
-                            <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
-                              {transaction.suggestedCategory}
-                            </span>
-                          </td>
-                        </tr>
+                      {editableTransactions.map((transaction, index) => (
+                        editingIndex === index ? (
+                          <TransactionEditRow
+                            key={index}
+                            transaction={transaction}
+                            index={index}
+                            onSave={(updatedTransaction) => saveEdit(index, updatedTransaction)}
+                            onCancel={cancelEditing}
+                          />
+                        ) : (
+                          <tr key={index} className="border-b border-gray-100 hover:bg-gray-50">
+                            <td className="py-2 px-3">{formatDate(transaction.date)}</td>
+                            <td className="py-2 px-3">{transaction.description}</td>
+                            <td
+                              className={`py-2 px-3 text-right font-medium ${
+                                transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
+                              }`}
+                            >
+                              {formatCurrency(transaction.amount)}
+                            </td>
+                            <td className="py-2 px-3">
+                              <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
+                                {transaction.suggestedCategory}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3 text-center space-x-1">
+                              <button
+                                onClick={() => startEditing(index)}
+                                className="px-2 py-1 bg-blue-500 text-white rounded text-xs hover:bg-blue-600"
+                                disabled={isEditing}
+                                title={t('common.edit')}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => deleteTransaction(index)}
+                                className="px-2 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600"
+                                disabled={isEditing}
+                                title={t('common.delete')}
+                              >
+                                Del
+                              </button>
+                            </td>
+                          </tr>
+                        )
                       ))}
                     </tbody>
                   </table>
@@ -679,7 +1048,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
               <div className="flex justify-end pt-4">
                 <button
                   onClick={handleConfirm}
-                  disabled={!selectedTarget || isConfirming}
+                  disabled={!(forcedTarget || selectedTarget) || isConfirming}
                   className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isConfirming ? (
@@ -730,7 +1099,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                   <p className="text-sm">{cameraError}</p>
                   <button
                     onClick={openCamera}
-                    className="mt-3 px-4 py-2 bg.white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
+                    className="mt-3 px-4 py-2 bg-white/20 rounded-lg text-sm hover:bg-white/30 transition-colors"
                   >
                     {t('pdfUploader.tryAgain')}
                   </button>
@@ -772,7 +1141,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                   <button
                     type="button"
                     onClick={switchCamera}
-                    className="p-3 rounded-full bg-white/10 hover:bg.white/20 transition-all backdrop-blur-sm"
+                    className="p-3 rounded-full bg-white/10 hover:bg-white/20 transition-all backdrop-blur-sm"
                   >
                     <RotateCcw className="h-5 w-5" />
                   </button>
