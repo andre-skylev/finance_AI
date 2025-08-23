@@ -60,6 +60,7 @@ function useNavGroups(): NavGroup[] {
       items: [
         { href: "/goals", icon: Target, label: t("navigation.goals") },
         { href: "/fixed-costs", icon: Calendar, label: t("navigation.fixedCosts") },
+  { href: "/fixed-incomes", icon: Calendar, label: t("navigation.fixedIncomes") },
       ],
     },
     {

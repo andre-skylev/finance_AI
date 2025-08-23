@@ -8,12 +8,34 @@
   "categories": "Categorias",
     "goals": "Objetivos",
     "fixedCosts": "Custos Fixos",
+  "fixedIncomes": "Entradas Fixas",
     "settings": "Configurações",
     "logout": "Sair",
     "chat": "Chat IA",
   "language": "Idioma",
   "toggleMenu": "Alternar menu",
   "receipts": "Recibos"
+  },
+  "creditCards": {
+    "closingDay": "Dia Fechamento",
+    "dueDay": "Dia Vencimento"
+  },
+  "fixedIncomes": {
+    "title": "Entradas Fixas",
+    "subtitle": "Gerir receitas recorrentes (salários, pensões, rendimentos)",
+    "newIncome": "Nova Entrada Fixa",
+    "totalMonthly": "Total Mensal Estimado",
+    "activeIncomes": "entradas ativas",
+    "noIncomes": "Nenhuma entrada fixa encontrada",
+    "name": "Nome",
+    "amount": "Valor",
+    "period": "Período",
+    "startDate": "Data de Início",
+    "endDate": "Data de Fim",
+    "payDay": "Dia de Recebimento",
+    "nextPay": "Próximo",
+    "placeholders": { "name": "Ex: Salário", "amount": "0.00", "payDay": "Ex: 25" },
+    "deleteConfirm": "Tem a certeza que deseja eliminar esta entrada fixa?"
   },
   "navGroup": {
     "overview": "Visão geral",

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Plus, CreditCard, Edit2, Trash2, Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { useLanguage } from '@/contexts/LanguageContext'
 
 interface CreditCard {
   id: string
@@ -47,6 +48,7 @@ interface NewCreditCard {
 
 export default function CreditCardsPage() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [creditCards, setCreditCards] = useState<CreditCard[]>([])
   const [loading, setLoading] = useState(true)
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -333,7 +335,7 @@ export default function CreditCardsPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                       <div>
-                        <Label htmlFor="closing_day">Dia Fechamento</Label>
+                        <Label htmlFor="closing_day">{t('creditCards.closingDay')}</Label>
                         <Input
                           id="closing_day"
                           type="number"
@@ -345,7 +347,7 @@ export default function CreditCardsPage() {
                         />
                       </div>
                       <div>
-                        <Label htmlFor="due_day">Dia Vencimento</Label>
+                        <Label htmlFor="due_day">{t('creditCards.dueDay')}</Label>
                         <Input
                           id="due_day"
                           type="number"
@@ -496,15 +498,15 @@ export default function CreditCardsPage() {
                     {(card.closing_day || card.due_day) && (
                       <div className="pt-2 border-t">
                         <div className="grid grid-cols-2 gap-2 text-sm">
-                          {card.closing_day && (
+              {card.closing_day && (
                             <div>
-                              <span className="text-gray-600">Fecha dia:</span>
+                <span className="text-gray-600">{t('creditCards.closingDay')}:</span>
                               <div className="font-medium">{card.closing_day}</div>
                             </div>
                           )}
-                          {card.due_day && (
+              {card.due_day && (
                             <div>
-                              <span className="text-gray-600">Vence dia:</span>
+                <span className="text-gray-600">{t('creditCards.dueDay')}:</span>
                               <div className="font-medium">{card.due_day}</div>
                             </div>
                           )}

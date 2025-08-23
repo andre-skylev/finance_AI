@@ -8,12 +8,34 @@
     "categories": "Categories",
     "goals": "Goals",
     "fixedCosts": "Fixed Costs",
+  "fixedIncomes": "Fixed Incomes",
     "settings": "Settings",
     "logout": "Sign Out",
     "chat": "AI Chat",
     "language": "Language",
     "toggleMenu": "Toggle menu",
     "receipts": "Receipts"
+  },
+  "creditCards": {
+    "closingDay": "Closing Day",
+    "dueDay": "Due Day"
+  },
+  "fixedIncomes": {
+    "title": "Fixed Incomes",
+    "subtitle": "Manage recurring incomes (salaries, pensions, yields)",
+    "newIncome": "New Fixed Income",
+    "totalMonthly": "Estimated Monthly Total",
+    "activeIncomes": "active incomes",
+    "noIncomes": "No fixed incomes found",
+    "name": "Name",
+    "amount": "Amount",
+    "period": "Period",
+    "startDate": "Start Date",
+    "endDate": "End Date",
+    "payDay": "Pay Day",
+    "nextPay": "Next",
+    "placeholders": { "name": "e.g., Salary", "amount": "0.00", "payDay": "e.g., 25" },
+    "deleteConfirm": "Are you sure you want to delete this fixed income?"
   },
   "navGroup": {
     "overview": "Overview",

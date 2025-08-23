@@ -17,7 +17,8 @@ export async function POST(request: NextRequest) {
       transaction_type,
       installments = 1,
       installment_number = 1,
-      merchant_name = null
+      merchant_name = null,
+      category_id = null
     } = body
 
     if (!credit_card_id || !transaction_date || !amount || !currency || !transaction_type) {
@@ -37,6 +38,22 @@ export async function POST(request: NextRequest) {
       .single()
     if (cardErr || !card) return NextResponse.json({ error: 'Invalid credit card' }, { status: 400 })
 
+    // Optional: validate category belongs to user or is a default
+    let validCategoryId: string | null = null
+    if (category_id) {
+      const { data: category, error: catErr } = await supabase
+        .from('categories')
+        .select('id, user_id, is_default')
+        .eq('id', category_id)
+        .or(`user_id.eq.${user.id},is_default.eq.true`)
+        .single()
+      if (!catErr && category) {
+        validCategoryId = category.id
+      } else {
+        return NextResponse.json({ error: 'Invalid category' }, { status: 400 })
+      }
+    }
+
     // Insert transaction
     const { data: inserted, error: insErr } = await supabase
       .from('credit_card_transactions')
@@ -50,7 +67,8 @@ export async function POST(request: NextRequest) {
         currency,
         transaction_type,
         installments,
-        installment_number
+        installment_number,
+        category_id: validCategoryId
       })
       .select('*')
       .single()

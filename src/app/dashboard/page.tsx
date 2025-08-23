@@ -10,65 +10,46 @@ import { BudgetVsActual } from "@/components/widgets/BudgetVsActual";
 import { FinancialKPIs } from "@/components/widgets/FinancialKPIs";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
+import CurrencyDropdown from "@/components/CurrencyDropdown";
 import { FileUp, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useLanguage } from "@/contexts/LanguageContext";
 import { useMemo, useState } from "react";
 
 export default function DashboardPage() {
   const [switching, setSwitching] = useState(false)
   const RateInfo = () => {
     const { displayCurrency, rates } = useCurrency()
+    const { language } = useLanguage()
     const text = useMemo(() => {
       if (!rates) return null
       const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
-      const when = last.toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' })
+      const locale = language === 'pt' ? 'pt-PT' : 'en-US'
+      const when = last.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
       const rate = displayCurrency === 'EUR' ? rates.brl_to_eur : rates.eur_to_brl
       const pair = displayCurrency === 'EUR' ? 'BRL→EUR' : 'EUR→BRL'
-      const stale = rates.stale ? ' • cache antigo' : ''
+      const stale = rates.stale ? (language === 'pt' ? ' • cache antigo' : ' • stale cache') : ''
       const src = rates.source ? ` • ${rates.source}` : ''
-      return `${pair}: ${rate.toFixed(4)} • atualizado ${when}${stale}${src}`
-    }, [rates, displayCurrency])
+      const updated = language === 'pt' ? ' • atualizado ' : ' • updated '
+      return `${pair}: ${rate.toFixed(4)}${updated}${when}${stale}${src}`
+    }, [rates, displayCurrency, language])
     if (!text) return null
     return (
       <div className="text-xs text-muted-foreground text-right">{text}</div>
     )
   }
-  const CurrencyToggle = () => {
-    const { displayCurrency, setDisplayCurrency } = useCurrency()
-    return (
-      <div className="flex items-center justify-end">
-        <div className="inline-flex gap-2">
-          <Button
-            variant={displayCurrency === 'EUR' ? 'default' : 'outline'}
-            size="sm"
-            disabled={switching}
-            onClick={() => {
-              if (displayCurrency === 'EUR') return
-              setSwitching(true)
-              setDisplayCurrency('EUR')
-              setTimeout(() => setSwitching(false), 500)
-            }}
-          >
-            EUR
-          </Button>
-          <Button
-            variant={displayCurrency === 'BRL' ? 'default' : 'outline'}
-            size="sm"
-            disabled={switching}
-            onClick={() => {
-              if (displayCurrency === 'BRL') return
-              setSwitching(true)
-              setDisplayCurrency('BRL')
-              setTimeout(() => setSwitching(false), 500)
-            }}
-          >
-            BRL
-          </Button>
-        </div>
-      </div>
-    )
-  }
+  // Dropdown-based currency selector
+  const CurrencyToggle = () => (
+    <div className="flex items-center justify-end">
+      <CurrencyDropdown
+        disabled={switching}
+  loading={switching}
+        onChangeStart={() => setSwitching(true)}
+        onChangeEnd={() => setSwitching(false)}
+      />
+    </div>
+  )
   return (
     <ProtectedRoute>
       <div className="space-y-6 relative">

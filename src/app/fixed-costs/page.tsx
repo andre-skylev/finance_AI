@@ -7,6 +7,8 @@ import { useAuth } from '@/components/AuthProvider'
 import { useLanguage } from '../../contexts/LanguageContext'
 import { Plus, Calendar, Euro, Edit, Trash2, RotateCcw } from 'lucide-react'
 import Link from 'next/link'
+import CurrencyDropdown from '@/components/CurrencyDropdown'
+import { useCurrency } from '@/contexts/CurrencyContext'
 
 interface FixedCost {
   id: string
@@ -26,6 +28,7 @@ export default function FixedCostsPage() {
   const { user } = useAuth()
   const { t } = useLanguage()
   const supabase = createClient()
+  const { displayCurrency, convert } = useCurrency()
   const [fixedCosts, setFixedCosts] = useState<FixedCost[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -196,7 +199,10 @@ export default function FixedCostsPage() {
 
   const totalMonthlyFixed = fixedCosts
     .filter(fc => fc.is_active)
-    .reduce((sum, fc) => sum + getMonthlyAmount(fc.amount, fc.billing_period), 0)
+    .reduce((sum, fc) => {
+      const monthly = getMonthlyAmount(fc.amount, fc.billing_period)
+      return sum + convert(monthly, (fc.currency as 'EUR'|'BRL'), displayCurrency)
+    }, 0)
 
   if (loading) {
     return (
@@ -216,6 +222,7 @@ export default function FixedCostsPage() {
             <h1 className="text-2xl font-semibold text-gray-900">{t('fixedCosts.title')}</h1>
             <p className="text-gray-600">{t('fixedCosts.subtitle')}</p>
           </div>
+          <CurrencyDropdown />
           <button
             onClick={() => setShowForm(!showForm)}
             className="inline-flex items-center px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
@@ -231,7 +238,7 @@ export default function FixedCostsPage() {
             <div>
               <h3 className="text-lg font-medium text-gray-900">{t('fixedCosts.totalMonthly')}</h3>
               <p className="text-3xl font-bold text-red-600">
-                €{totalMonthlyFixed.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                {displayCurrency === 'EUR' ? '€' : 'R$'}{totalMonthlyFixed.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-sm text-gray-500 mt-1">
                 {fixedCosts.filter(fc => fc.is_active).length} {t('fixedCosts.activeCosts')}
@@ -399,11 +406,12 @@ export default function FixedCostsPage() {
                     <div className="flex items-center space-x-4">
                       <div className="text-right">
                         <p className="text-lg font-semibold text-red-600">
-                          {fixedCost.currency === 'EUR' ? '€' : 'R$'}
-                          {fixedCost.amount.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                          {displayCurrency === 'EUR' ? '€' : 'R$'}
+                          {convert(fixedCost.amount, fixedCost.currency as 'EUR'|'BRL', displayCurrency).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
                         </p>
                         <p className="text-sm text-gray-500">
-                          ≈ €{getMonthlyAmount(fixedCost.amount, fixedCost.billing_period).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}/{t('fixedCosts.monthly')}
+                          ≈ {displayCurrency === 'EUR' ? '€' : 'R$'}
+                          {convert(getMonthlyAmount(fixedCost.amount, fixedCost.billing_period), fixedCost.currency as 'EUR'|'BRL', displayCurrency).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}/{t('fixedCosts.monthly')}
                         </p>
                       </div>
                       

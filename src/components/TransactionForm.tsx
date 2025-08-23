@@ -153,7 +153,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
           }
         }
         await createTransaction(transactionData)
-      } else {
+    } else {
         // credit card path
         const cardId = formData.account_id.startsWith('cc:') ? formData.account_id.split(':')[1] : formData.account_id
         const isPayment = formData.type === 'income'
@@ -165,7 +165,8 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
           currency: formData.currency,
           transaction_type: isPayment ? 'payment' : 'purchase',
           installments: 1,
-          installment_number: 1
+      installment_number: 1,
+      category_id: !isPayment ? (formData.category_id || null) : null
         }
         const res = await fetch('/api/credit-card-transactions', {
           method: 'POST',
@@ -359,6 +360,24 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               <Label htmlFor="category_id">Categoria</Label>
               <select
                 id="category_id"
+                value={formData.category_id}
+                onChange={(e) => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="">Selecione uma categoria</option>
+                {filteredCategories.map((category: any) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          {targetType === 'credit_card' && formData.type === 'expense' && (
+            <div className="space-y-2">
+              <Label htmlFor="cc_category_id">Categoria</Label>
+              <select
+                id="cc_category_id"
                 value={formData.category_id}
                 onChange={(e) => setFormData(prev => ({ ...prev, category_id: e.target.value }))}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"

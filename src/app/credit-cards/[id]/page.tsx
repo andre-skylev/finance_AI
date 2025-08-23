@@ -7,6 +7,7 @@ import { createClient } from '@/lib/supabase/client'
 import { ArrowLeft, Eye, EyeOff, FileText, Plus, CreditCard as CreditCardIcon } from 'lucide-react'
 import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
+import { useCategories } from '@/hooks/useFinanceData'
 import PDFUploader from '@/components/PDFUploader'
 
 type CardTx = {
@@ -46,7 +47,8 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		type: 'purchase' as 'purchase' | 'payment',
 		amount: '',
 		date: new Date().toISOString().split('T')[0],
-		description: ''
+		description: '',
+		category_id: ''
 	})
 	const [saving, setSaving] = useState(false)
 
@@ -112,6 +114,8 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		}
 	}
 
+	const { categories } = useCategories()
+
 	const handleSave = async () => {
 		if (!user || !card) return
 		const amt = parseFloat(form.amount)
@@ -130,6 +134,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 				transaction_type: isPurchase ? 'purchase' : 'payment',
 				installments: 1,
 				installment_number: 1,
+				category_id: isPurchase && form.category_id ? form.category_id : null,
 			}
 			const { error: insErr } = await supabase.from('credit_card_transactions').insert([toInsert])
 			if (insErr) throw insErr
@@ -155,7 +160,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 				.eq('credit_card_id', card.id)
 				.order('transaction_date', { ascending: false })
 			setMovements((txs || []) as any)
-			setForm({ type: 'purchase', amount: '', date: new Date().toISOString().split('T')[0], description: '' })
+			setForm({ type: 'purchase', amount: '', date: new Date().toISOString().split('T')[0], description: '', category_id: '' })
 		} catch (e) {
 			console.error(e)
 		} finally {
@@ -226,7 +231,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 
 				{/* Quick add movement */}
 				<div className="bg-white rounded-lg border p-4">
-					<div className="grid gap-3 sm:grid-cols-5">
+					<div className="grid gap-3 sm:grid-cols-6">
 						<select
 							className="px-3 py-2 rounded-md border"
 							value={form.type}
@@ -255,6 +260,18 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 							value={form.description}
 							onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
 						/>
+						{form.type === 'purchase' ? (
+							<select
+								className="px-3 py-2 rounded-md border"
+								value={form.category_id}
+								onChange={(e) => setForm((p) => ({ ...p, category_id: e.target.value }))}
+							>
+								<option value="">{language === 'pt' ? 'Categoria' : 'Category'}</option>
+								{categories.filter((c:any)=>c.type==='expense').map((c:any)=>(
+									<option key={c.id} value={c.id}>{c.name}</option>
+								))}
+							</select>
+						) : <div />}
 					</div>
 					<div className="flex justify-end mt-3">
 						<button
