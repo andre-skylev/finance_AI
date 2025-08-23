@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
-import { ArrowLeft, Save, Upload } from 'lucide-react'
+import { ArrowLeft, Save, Upload, Camera } from 'lucide-react'
 import Link from 'next/link'
 import { UploadStatus } from './components/UploadStatus'
 import { ReviewTransactions } from './components/ReviewTransactions'
@@ -295,20 +295,48 @@ export default function AddTransactionPage() {
               <p className="text-sm text-gray-500 mb-4">
                 Poupe tempo importando múltiplas transações de uma só vez.
               </p>
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileChange}
-                className="hidden"
-                accept="application/pdf"
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="w-full flex items-center justify-center px-4 py-3 bg-primary-light text-primary border-2 border-dashed border-primary rounded-lg hover:bg-primary-dark hover:text-white transition-all duration-300"
-              >
-                <Upload className="h-5 w-5 mr-3" />
-                Clique para selecionar um arquivo PDF
-              </button>
+              
+              {/* Detectar se é mobile para mostrar opções diferentes */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {/* Input para câmera (aparece como câmera no mobile) */}
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="application/pdf,image/*"
+                  capture="environment"
+                />
+                
+                {/* Botão para câmera nativa */}
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center justify-center px-4 py-3 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-all duration-300"
+                >
+                  <Camera className="h-5 w-5 mr-3" />
+                  Usar Câmera
+                </button>
+
+                {/* Input para galeria/arquivos */}
+                <input
+                  type="file"
+                  id="file-gallery"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  accept="application/pdf"
+                />
+                
+                {/* Botão para galeria/arquivos */}
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('file-gallery')?.click()}
+                  className="flex items-center justify-center px-4 py-3 bg-primary-light text-primary border-2 border-dashed border-primary rounded-lg hover:bg-primary-dark hover:text-white transition-all duration-300"
+                >
+                  <Upload className="h-5 w-5 mr-3" />
+                  Selecionar Arquivo
+                </button>
+              </div>
             </div>
 
             <div className="relative flex items-center py-2">

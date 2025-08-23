@@ -78,6 +78,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
   const [processingStartTime, setProcessingStartTime] = useState<number | null>(null)
   
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const galleryInputRef = useRef<HTMLInputElement | null>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const [isCameraOpen, setIsCameraOpen] = useState(false)
@@ -691,18 +692,27 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
               </button>
               <button
                 type="button"
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => galleryInputRef.current?.click()}
                 className="flex items-center justify-center px-6 py-4 bg-white text-gray-900 rounded-xl hover:bg-gray-50 transition-all border border-gray-200"
               >
                 <Upload className="h-4 w-4 mr-2" />
-                {t('pdfUploader.chooseFile')}
+                {t('pdfUploader.useGallery')}
               </button>
             </div>
+            {/* Input para câmera */}
             <input
               ref={fileInputRef}
               type="file"
-              accept=".pdf,image/*"
+              accept="image/*"
               capture="environment"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            {/* Input para galeria */}
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept=".pdf,image/*"
               onChange={handleFileSelect}
               className="hidden"
             />
@@ -727,9 +737,18 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
-                    className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
                   >
-                    {t('pdfUploader.replace')}
+                    <Camera className="h-3 w-3 mr-1" />
+                    {t('pdfUploader.useCamera')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors flex items-center justify-center"
+                  >
+                    <Upload className="h-3 w-3 mr-1" />
+                    {t('pdfUploader.useGallery')}
                   </button>
                   <button
                     type="button"
