@@ -16,7 +16,7 @@ type Budget = {
   category_id: string
   amount: number
   currency: 'EUR'|'BRL'
-  period: 'monthly'|'weekly'|'yearly'
+  period: 'monthly'|'weekly'|'yearly'|'semiannual'|'one_time'|'custom'
   mode?: 'absolute'|'percent_income'
   percent?: number|null
   is_active?: boolean
@@ -40,6 +40,9 @@ export default function BudgetsPage(){
     mode: 'absolute',
     percent: undefined,
   })
+  const [referenceDate, setReferenceDate] = useState<string>(new Date().toISOString().slice(0,10))
+  const [customStart, setCustomStart] = useState<string>('')
+  const [customEnd, setCustomEnd] = useState<string>('')
 
   useEffect(()=>{ if(user){ load() } },[user])
 
@@ -61,7 +64,14 @@ export default function BudgetsPage(){
     }
   }
 
-  const openNew = ()=>{ setEditing(null); setForm({ category_id:'', amount:0, currency:'EUR', period:'monthly', mode:'absolute', percent: undefined }); setOpen(true) }
+  const openNew = ()=>{ 
+    setEditing(null); 
+    setForm({ category_id:'', amount:0, currency:'EUR', period:'monthly', mode:'absolute', percent: undefined }); 
+    setReferenceDate(new Date().toISOString().slice(0,10))
+    setCustomStart('')
+    setCustomEnd('')
+    setOpen(true) 
+  }
   const openEdit = (row:any)=>{
     setEditing({
       id: row.id,
@@ -73,7 +83,10 @@ export default function BudgetsPage(){
       mode: 'absolute',
       percent: undefined,
     } as any)
-    setForm({ category_id: row.category_id, amount: row.budgeted, currency: row.currency, period: row.period, mode: 'absolute', percent: undefined })
+  setForm({ category_id: row.category_id, amount: row.budgeted, currency: row.currency, period: row.period, mode: 'absolute', percent: undefined })
+  setReferenceDate((row.start_date as string) || new Date().toISOString().slice(0,10))
+  setCustomStart(row.start_date || '')
+  setCustomEnd(row.end_date || '')
     setOpen(true)
   }
 
@@ -87,10 +100,53 @@ export default function BudgetsPage(){
       const v = Number(form.amount||0)
       if(!(v>0)){ alert('Informe um valor > 0'); return }
     }
-    // Current month bounds
-    const now = new Date()
-    const start = new Date(now.getFullYear(), now.getMonth(), 1)
-    const end = new Date(now.getFullYear(), now.getMonth()+1, 0)
+    // Compute bounds based on selected period
+    const ref = new Date(referenceDate + 'T00:00:00')
+    const startOfWeek = (d: Date) => {
+      const day = (d.getDay() + 6) % 7 // Monday=0
+      const s = new Date(d)
+      s.setDate(d.getDate() - day)
+      s.setHours(0,0,0,0)
+      return s
+    }
+    let start = new Date(ref)
+    let end = new Date(ref)
+    switch(form.period){
+      case 'weekly':
+        start = startOfWeek(ref)
+        end = new Date(start)
+        end.setDate(start.getDate() + 6)
+        break
+      case 'monthly':
+        start = new Date(ref.getFullYear(), ref.getMonth(), 1)
+        end = new Date(ref.getFullYear(), ref.getMonth()+1, 0)
+        break
+      case 'yearly':
+        start = new Date(ref.getFullYear(), 0, 1)
+        end = new Date(ref.getFullYear(), 11, 31)
+        break
+      case 'semiannual':
+        if (ref.getMonth() < 6) { // H1
+          start = new Date(ref.getFullYear(), 0, 1)
+          end = new Date(ref.getFullYear(), 5, 30)
+        } else { // H2
+          start = new Date(ref.getFullYear(), 6, 1)
+          end = new Date(ref.getFullYear(), 11, 31)
+        }
+        break
+      case 'one_time':
+        start = new Date(ref)
+        end = new Date(ref)
+        break
+      case 'custom':
+        if (!customStart || !customEnd) { alert('Informe início e fim do período'); return }
+        start = new Date(customStart + 'T00:00:00')
+        end = new Date(customEnd + 'T00:00:00')
+        break
+      default:
+        start = new Date(ref.getFullYear(), ref.getMonth(), 1)
+        end = new Date(ref.getFullYear(), ref.getMonth()+1, 0)
+    }
     const startStr = start.toISOString().split('T')[0]
     const endStr = end.toISOString().split('T')[0]
     const payload:any = {
@@ -140,9 +196,9 @@ export default function BudgetsPage(){
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-semibold">{t('dashboard.budgetVsActual')}</h1>
-            <p className="text-muted-foreground">Defina limites de gastos por categoria</p>
+            <p className="text-muted-foreground">{t('budgetsPage.subtitle')}</p>
           </div>
-          <Button onClick={openNew}><Plus className="mr-2 h-4 w-4"/>Novo Orçamento</Button>
+          <Button onClick={openNew}><Plus className="mr-2 h-4 w-4"/>{t('budgetsPage.new')}</Button>
         </div>
 
         {loading ? (
@@ -160,10 +216,11 @@ export default function BudgetsPage(){
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b">
-                  <th className="p-2 text-left">Categoria</th>
-                  <th className="p-2 text-right">Orçado</th>
-                  <th className="p-2 text-right">Gasto</th>
-                  <th className="p-2 text-right">Uso</th>
+                  <th className="p-2 text-left">{t('transactions.category')}</th>
+                  <th className="p-2 text-left">{t('fixedCosts.period')}</th>
+                  <th className="p-2 text-right">{t('dashboard.budgeted')}</th>
+                  <th className="p-2 text-right">{t('dashboard.actual')}</th>
+                  <th className="p-2 text-right">{t('budgetsPage.usage')}</th>
                   <th className="p-2"/>
                 </tr>
               </thead>
@@ -171,13 +228,14 @@ export default function BudgetsPage(){
                 {budgets.map((b:any)=> (
                   <tr key={b.id} className="border-b last:border-0">
                     <td className="p-2">{b.category || 'Outros'}</td>
+                    <td className="p-2 text-left whitespace-nowrap text-xs text-muted-foreground">{t(`periods.${b.period}`)} · {b.start_date} → {b.end_date}</td>
                     <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.budgeted||0)}</td>
                     <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.actual||0)}</td>
                     <td className={`p-2 text-right ${b.usage_percentage>=100?'text-red-600':b.usage_percentage>=80?'text-amber-600':'text-green-600'}`}>{(b.usage_percentage||0).toFixed(0)}%</td>
                     <td className="p-2 text-right">
                       <div className="inline-flex gap-2">
-                        <Button variant="outline" size="sm" onClick={()=>openEdit(b)}>Editar</Button>
-                        <Button variant="destructive" size="sm" onClick={()=>remove(b.id)}>Excluir</Button>
+                        <Button variant="outline" size="sm" onClick={()=>openEdit(b)}>{t('common.edit')}</Button>
+                        <Button variant="destructive" size="sm" onClick={()=>remove(b.id)}>{t('common.delete')}</Button>
                       </div>
                     </td>
                   </tr>
@@ -190,47 +248,75 @@ export default function BudgetsPage(){
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editing? 'Editar Orçamento':'Novo Orçamento'}</DialogTitle>
+              <DialogTitle>{editing? t('budgetsPage.editTitle') : t('budgetsPage.newTitle')}</DialogTitle>
             </DialogHeader>
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="text-sm">Categoria</label>
+                <label className="text-sm">{t('transactions.category')}</label>
                 <select className="w-full border rounded px-2 py-2" value={form.category_id as any} onChange={(e)=>setForm(f=>({...f, category_id:e.target.value}))}>
-                  <option value="">Selecione</option>
+                  <option value="">{t('common.select')}</option>
                   {categories.map((c:any)=>(<option key={c.id} value={c.id}>{c.name}</option>))}
                 </select>
               </div>
               <div>
-                <label className="text-sm">Moeda</label>
+                <label className="text-sm">{t('card.currency')}</label>
                 <select className="w-full border rounded px-2 py-2" value={form.currency as any} onChange={(e)=>setForm(f=>({...f, currency:e.target.value as any}))}>
                   <option value="EUR">EUR</option>
                   <option value="BRL">BRL</option>
                 </select>
               </div>
               <div>
-                <label className="text-sm">Modo</label>
+                <label className="text-sm">{t('fixedCosts.period')}</label>
+                <select className="w-full border rounded px-2 py-2" value={form.period as any} onChange={(e)=>setForm(f=>({...f, period:e.target.value as any}))}>
+                  <option value="weekly">{t('periods.weekly')}</option>
+                  <option value="monthly">{t('periods.monthly')}</option>
+                  <option value="semiannual">{t('periods.semiannual')}</option>
+                  <option value="yearly">{t('periods.yearly')}</option>
+                  <option value="one_time">{t('periods.one_time')}</option>
+                  <option value="custom">{t('periods.custom')}</option>
+                </select>
+              </div>
+              {form.period !== 'custom' ? (
+                <div>
+                  <label className="text-sm">{t('budgetsPage.reference')}</label>
+                  <Input type="date" value={referenceDate} onChange={(e)=>setReferenceDate(e.target.value)} />
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-sm">{t('budgetsPage.start')}</label>
+                    <Input type="date" value={customStart} onChange={(e)=>setCustomStart(e.target.value)} />
+                  </div>
+                  <div>
+                    <label className="text-sm">{t('budgetsPage.end')}</label>
+                    <Input type="date" value={customEnd} onChange={(e)=>setCustomEnd(e.target.value)} />
+                  </div>
+                </>
+              )}
+              <div>
+                <label className="text-sm">{t('budgetsPage.mode')}</label>
                 <select className="w-full border rounded px-2 py-2" value={form.mode as any} onChange={(e)=>setForm(f=>({...f, mode:e.target.value as any}))}>
-                  <option value="absolute">Valor fixo</option>
-                  <option value="percent_income">% da renda mensal</option>
+                  <option value="absolute">{t('budgetsPage.modes.absolute')}</option>
+                  <option value="percent_income">{t('budgetsPage.modes.percentIncome')}</option>
                 </select>
               </div>
               {form.mode === 'percent_income' ? (
                 <div>
-                  <label className="text-sm">Percentual (%)</label>
+                  <label className="text-sm">{t('budgetsPage.percentLabel')}</label>
                   <Input type="number" value={(form.percent as any) || ''} onChange={(e)=>setForm(f=>({...f, percent:e.target.value as any}))} />
                 </div>
               ) : (
                 <div>
-                  <label className="text-sm">Valor</label>
+                  <label className="text-sm">{t('fixedCosts.amount')}</label>
                   <Input type="number" value={(form.amount as any) || ''} onChange={(e)=>setForm(f=>({...f, amount:e.target.value as any}))} />
                 </div>
               )}
             </div>
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="secondary">Cancelar</Button>
+                <Button type="button" variant="secondary">{t('common.cancel')}</Button>
               </DialogClose>
-              <Button onClick={save}>Salvar</Button>
+              <Button onClick={save}>{t('common.save')}</Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

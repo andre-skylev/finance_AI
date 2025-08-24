@@ -218,12 +218,29 @@ async function getExpensesByCategory(supabase: any, userId: string, displayCurre
 
     // Fetch category metadata including parents
     const categoryIds = Array.from(new Set(Array.from(totals.keys()).filter((k): k is string => !!k)))
-  const { data: cats } = await supabase
+    const { data: catsRaw } = await supabase
       .from('categories')
       .select('id, name, color, parent_id')
       .in('id', categoryIds.length ? categoryIds : ['00000000-0000-0000-0000-000000000000'])
-  type Cat = { id: string; name: string; color: string; parent_id: string | null }
-  const catMap = new Map<string, Cat>((cats as Cat[] | null || []).map((c) => [c.id, c]))
+    type Cat = { id: string; name: string; color: string; parent_id: string | null }
+    const cats = (catsRaw as Cat[] | null) || []
+    const initialCatMap = new Map<string, Cat>(cats.map((c) => [c.id, c]))
+    // Identify missing parent ids and fetch them to ensure grouping by parent works even if parent had no direct txs
+    const missingParentIds = Array.from(new Set(cats
+      .map((c) => c.parent_id)
+      .filter((pid): pid is string => !!pid && !initialCatMap.has(pid))))
+    let parentCats: Cat[] = []
+    if (missingParentIds.length) {
+      const { data: parentsRaw } = await supabase
+        .from('categories')
+        .select('id, name, color, parent_id')
+        .in('id', missingParentIds)
+      parentCats = (parentsRaw as Cat[] | null) || []
+    }
+    const catMap = new Map<string, Cat>([
+      ...Array.from(initialCatMap.entries()),
+      ...parentCats.map((p): [string, Cat] => [p.id, p])
+    ])
 
     // Build parent grouping with children breakdown
   type Child = { id: string; name: string; value: number }
@@ -516,6 +533,7 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
 
 async function getBudgetVsActual(supabase: any, userId: string) {
   try {
+    const rates = await getLatestRates(supabase)
     // Load active budgets and categories
     const { data: budgets, error: bErr } = await supabase
       .from('budgets')
@@ -535,10 +553,20 @@ async function getBudgetVsActual(supabase: any, userId: string) {
       .in('id', categoryIds.length ? categoryIds : ['00000000-0000-0000-0000-000000000000'])
     const catMap = new Map((cats || []).map((c: any) => [c.id, c]))
 
-    // Define spend window: last 30 days (to mirror previous view)
-    const end = new Date()
-    const start = new Date()
-    start.setDate(start.getDate() - 30)
+    if (!budgets || budgets.length === 0) {
+      return NextResponse.json({ data: [] })
+    }
+
+    // Define spend window to cover all budgets' ranges
+    const parseDate = (d: string) => new Date(d + 'T00:00:00')
+    const minStart = budgets.reduce((min: Date, b: any) => {
+      const d = parseDate(b.start_date)
+      return d < min ? d : min
+    }, parseDate(budgets[0].start_date))
+    const maxEnd = budgets.reduce((max: Date, b: any) => {
+      const d = parseDate(b.end_date)
+      return d > max ? d : max
+    }, parseDate(budgets[0].end_date))
 
     // Active accounts
     const { data: activeAccounts } = await supabase
@@ -551,37 +579,36 @@ async function getBudgetVsActual(supabase: any, userId: string) {
     // Fetch expenses in window grouped in memory by category
     const { data: txs } = await supabase
       .from('bank_account_transactions')
-      .select('amount, currency, category_id')
+      .select('amount, currency, category_id, transaction_date')
       .eq('user_id', userId)
       .in('account_id', activeIds.length ? activeIds : ['00000000-0000-0000-0000-000000000000'])
       .eq('transaction_type', 'debit')
-      .gte('transaction_date', start.toISOString().split('T')[0])
-      .lt('transaction_date', end.toISOString().split('T')[0])
+  .gte('transaction_date', minStart.toISOString().split('T')[0])
+  .lt('transaction_date', new Date(maxEnd.getFullYear(), maxEnd.getMonth(), maxEnd.getDate() + 1).toISOString().split('T')[0])
 
-    const spentByCategory = new Map<string, { total: number; currency: 'EUR'|'BRL' }>()
-    for (const t of txs || []) {
-      if (!t.category_id) continue
-      const cur: 'EUR'|'BRL' = (t.currency || 'EUR')
-      const prev = spentByCategory.get(t.category_id) || { total: 0, currency: cur }
-      spentByCategory.set(t.category_id, { total: prev.total + Number(t.amount || 0), currency: cur })
-    }
-
-  const formatted = (budgets || []).map((b: any) => {
+    // Compute actuals per budget range
+  const txList = (txs || []) as any[]
+    const formatted = (budgets || []).map((b: any) => {
       const cat = (b.category_id ? (catMap.get(b.category_id) as any) : null) as any
-      const spent = b.category_id ? spentByCategory.get(b.category_id) : { total: 0, currency: b.currency || 'EUR' }
-      const spentAmount = spent ? Number(spent.total) : 0
-      // Convert spent to budget currency if needed
-      const rates = { eur_to_brl: Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL) || 1, brl_to_eur: 1 / (Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL) || 1) }
-      const spentInBudgetCur = convertAmount(spentAmount, (spent?.currency || 'EUR'), (b.currency || 'EUR'), rates as any)
+      const startB = parseDate(b.start_date)
+      const endB = parseDate(b.end_date)
+      const endBPlus = new Date(endB.getFullYear(), endB.getMonth(), endB.getDate() + 1)
+      const relevant = txList.filter((t: any) => {
+        if (!t.category_id) return false
+        if (t.category_id !== b.category_id) return false
+        const dt = parseDate(t.transaction_date)
+        return dt >= startB && dt < endBPlus
+      })
+  const spentInBudgetCur = relevant.reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount || 0), (t.currency || 'EUR'), (b.currency || 'EUR'), rates as any), 0)
       const budgeted = Number(b.amount || 0)
       const variance = budgeted > 0 ? ((spentInBudgetCur - budgeted) / budgeted) * 100 : 0
       return {
-    id: b.id,
-    category_id: b.category_id,
-    category: cat?.name || 'Outros',
+        id: b.id,
+        category_id: b.category_id,
+        category: cat?.name || 'Outros',
         budgeted,
         actual: spentInBudgetCur,
-    usage_percentage: budgeted > 0 ? (spentInBudgetCur / budgeted) * 100 : 0,
+        usage_percentage: budgeted > 0 ? (spentInBudgetCur / budgeted) * 100 : 0,
         variance,
         color: cat?.color || '#6b7280',
         currency: b.currency || 'EUR',

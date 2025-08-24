@@ -227,7 +227,26 @@
   "periods": {
     "weekly": "Weekly",
     "monthly": "Monthly",
-    "yearly": "Yearly"
+    "yearly": "Yearly",
+    "semiannual": "Semiannual",
+    "one_time": "One-time",
+    "custom": "Custom range"
+  },
+  "budgetsPage": {
+    "subtitle": "Set spending limits per category",
+    "new": "New Budget",
+    "usage": "Usage",
+    "editTitle": "Edit Budget",
+    "newTitle": "New Budget",
+    "reference": "Reference",
+    "start": "Start",
+    "end": "End",
+    "mode": "Mode",
+    "modes": {
+      "absolute": "Fixed amount",
+      "percentIncome": "% of monthly income"
+    },
+    "percentLabel": "Percent (%)"
   },
   "settings": {
     "title": "Settings",
@@ -509,7 +528,10 @@
     "add": "Add category",
     "addButton": "Add",
     "delete": "Delete",
-    "deleteConfirm": "Are you sure you want to delete this category?"
+  "deleteConfirm": "Are you sure you want to delete this category?",
+  "parent": "Parent category",
+  "noParent": "No parent (top-level)",
+  "parentHelp": "Optional: select a parent to create a subcategory."
   },
   "categories": {
     "defaults": {

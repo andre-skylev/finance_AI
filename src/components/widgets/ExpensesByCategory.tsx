@@ -1,15 +1,19 @@
 "use client"
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useCurrency } from '@/hooks/useCurrency';
+import { ChevronLeft } from 'lucide-react'
  
 export function ExpensesByCategory() {
   const { t } = useLanguage();
-  const { displayCurrency, formatWithConversion } = useCurrency();
-  const [data, setData] = useState<Array<{name:string; value:number; color:string}>>([])
+  const { displayCurrency } = useCurrency();
+  type Child = { id: string; name: string; value: number }
+  type Parent = { id: string | null; name: string; color: string; value: number; children: Child[] }
+  const [parents, setParents] = useState<Parent[]>([])
+  const [selected, setSelected] = useState<Parent | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -20,9 +24,15 @@ export function ExpensesByCategory() {
         const res = await fetch(`/api/dashboard?type=expenses-by-category&currency=${displayCurrency}`)
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
-        if (!cancelled) setData(j.data || [])
+        if (!cancelled) {
+          setParents(Array.isArray(j.data) ? j.data : [])
+          setSelected(null)
+        }
       } catch (_) {
-        if (!cancelled) setData([])
+        if (!cancelled) {
+          setParents([])
+          setSelected(null)
+        }
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -31,39 +41,67 @@ export function ExpensesByCategory() {
     return () => { cancelled = true }
   }, [displayCurrency])
 
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload && payload.length) {
-    const data = payload[0];
-    return (
-      <div className="bg-background border border-border rounded-lg shadow-lg p-3">
-        <div className="flex items-center gap-2 mb-1">
-          <div 
-            className="w-3 h-3 rounded-full" 
-            style={{ backgroundColor: data.payload.color }}
-          />
-          <span className="font-medium text-sm">{data.payload.name}</span>
-        </div>
-        <div className="text-sm text-muted-foreground">
-          {formatWithConversion(data.value, 'EUR')}
-        </div>
-      </div>
-    );
-  }
-  return null;
-};
+  // Simple color palette for children
+  const CHILD_COLORS = ['#60a5fa','#34d399','#f59e0b','#f472b6','#22c55e','#a78bfa','#fb7185','#38bdf8','#84cc16','#f97316']
+  const childColors = (count: number) => Array.from({length: count}, (_, i)=> CHILD_COLORS[i % CHILD_COLORS.length])
 
-  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const currentData = useMemo(() => {
+    if (!selected) {
+      return parents.map(p => ({ name: p.name, value: p.value, color: p.color, id: p.id }))
+    }
+    const colors = childColors(selected.children.length)
+    return selected.children.map((c, idx) => ({ name: c.name, value: c.value, color: colors[idx], id: c.id }))
+  }, [parents, selected])
+
+  const total = currentData.reduce((sum, item) => sum + item.value, 0);
+
+  const onSliceClick = (index: number) => {
+    if (!selected) {
+      const p = parents[index]
+      if (p) setSelected(p)
+    }
+  }
+
+  const backToParents = () => setSelected(null)
+
+  const CustomTooltip = ({ active, payload }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0];
+      return (
+        <div className="bg-background border border-border rounded-lg shadow-lg p-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div 
+              className="w-3 h-3 rounded-full" 
+              style={{ backgroundColor: data.payload.color }}
+            />
+            <span className="font-medium text-sm">{data.payload.name}</span>
+          </div>
+          <div className="text-sm text-muted-foreground">
+            {(displayCurrency === 'EUR' ? '€' : 'R$')}{Number(data.value || 0).toLocaleString()}
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
 
   return (
     <Card className="col-span-12 lg:col-span-6">
       <CardHeader className="pb-4">
-        <CardTitle className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-primary rounded-full"></div>
-          {t('dashboard.expensesByCategory')}
-        </CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-primary rounded-full"></div>
+            {t('dashboard.expensesByCategory')}
+          </CardTitle>
+          {selected && (
+            <button onClick={backToParents} className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground">
+              <ChevronLeft className="w-4 h-4 mr-1" /> {t('common.back') || 'Voltar'}
+            </button>
+          )}
+        </div>
       </CardHeader>
       <CardContent className="p-6">
-        {(!loading && data.length === 0) ? (
+  {(!loading && parents.length === 0) ? (
           <p className="text-sm text-muted-foreground">{t('dashboard.noData') || 'No data yet'}</p>
         ) : (
         <>
@@ -71,7 +109,7 @@ const CustomTooltip = ({ active, payload }: any) => {
           <div className="flex-shrink-0">
             <PieChart width={240} height={240}>
               <Pie
-                  data={data}
+                  data={currentData}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -79,8 +117,9 @@ const CustomTooltip = ({ active, payload }: any) => {
                   paddingAngle={2}
                   dataKey="value"
                   stroke="none"
+                  onClick={(_, index) => onSliceClick(index as number)}
                 >
-                  {data.map((entry, index) => (
+                  {currentData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.color} />
                   ))}
                 </Pie>
@@ -89,10 +128,10 @@ const CustomTooltip = ({ active, payload }: any) => {
           </div>
           
           <div className="flex-1 space-y-3 min-w-0">
-            {data.map((item, index) => {
+            {currentData.map((item, index) => {
               const percentage = ((item.value / total) * 100);
               return (
-                <div key={index} className="group hover:bg-muted/50 rounded-md p-2 transition-colors">
+                <div key={index} className="group hover:bg-muted/50 rounded-md p-2 transition-colors cursor-pointer" onClick={() => onSliceClick(index)}>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3 min-w-0">
                       <div 

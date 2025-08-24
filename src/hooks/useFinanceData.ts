@@ -39,6 +39,7 @@ interface Category {
   color: string
   type: 'income' | 'expense'
   is_default: boolean
+  parent_id?: string | null
 }
 
 export function useAccounts() {

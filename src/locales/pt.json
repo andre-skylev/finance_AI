@@ -228,7 +228,26 @@
   "periods": {
     "weekly": "Semanal",
     "monthly": "Mensal",
-    "yearly": "Anual"
+    "yearly": "Anual",
+    "semiannual": "Semestral",
+    "one_time": "Data única",
+    "custom": "Intervalo personalizado"
+  },
+  "budgetsPage": {
+    "subtitle": "Defina limites de gastos por categoria",
+    "new": "Novo Orçamento",
+    "usage": "Uso",
+    "editTitle": "Editar Orçamento",
+    "newTitle": "Novo Orçamento",
+    "reference": "Referência",
+    "start": "Início",
+    "end": "Fim",
+    "mode": "Modo",
+    "modes": {
+      "absolute": "Valor fixo",
+      "percentIncome": "% da renda mensal"
+    },
+    "percentLabel": "Percentual (%)"
   },
   "settings": {
     "title": "Configurações",
@@ -512,7 +531,10 @@
     "add": "Adicionar categoria",
     "addButton": "Adicionar",
     "delete": "Eliminar",
-    "deleteConfirm": "Tem a certeza que deseja eliminar esta categoria?"
+  "deleteConfirm": "Tem a certeza que deseja eliminar esta categoria?",
+  "parent": "Categoria pai",
+  "noParent": "Sem pai (nível superior)",
+  "parentHelp": "Opcional: selecione um pai para criar uma subcategoria."
   }
   ,
   "categories": {

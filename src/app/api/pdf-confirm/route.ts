@@ -11,7 +11,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Não autorizado' }, { status: 401 })
     }
 
-  const { transactions, target, receipts } = await request.json()
+  const { transactions, target, receipts, currency: sourceCurrencyRaw, documentCurrency } = await request.json()
+
+  // Setup exchange conversion EUR<->BRL (today -> latest -> env fallback)
+  const todayStr = new Date().toISOString().split('T')[0]
+  const { data: todayRate } = await supabase
+    .from('exchange_rates')
+    .select('*')
+    .eq('rate_date', todayStr)
+    .maybeSingle()
+  let eur_to_brl: number | null = todayRate ? Number(todayRate.eur_to_brl) : null
+  let brl_to_eur: number | null = todayRate ? Number(todayRate.brl_to_eur) : null
+  if (!eur_to_brl || !brl_to_eur) {
+    const { data: latest } = await supabase
+      .from('exchange_rates')
+      .select('*')
+      .order('rate_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (latest) {
+      eur_to_brl = Number(latest.eur_to_brl)
+      brl_to_eur = Number(latest.brl_to_eur)
+    }
+  }
+  if (!eur_to_brl || !brl_to_eur) {
+    const envEUR = Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL)
+    if (isFinite(envEUR) && envEUR > 0) {
+      eur_to_brl = envEUR
+      brl_to_eur = 1 / envEUR
+    }
+  }
+
+  const sourceCurrency = ((sourceCurrencyRaw || documentCurrency || 'EUR') as string).toUpperCase()
+  const convertAmount = (amountAbs: number, from: string, to: string): number => {
+    if (!isFinite(amountAbs)) return 0
+    if (from === to) return amountAbs
+    if (from === 'EUR' && to === 'BRL' && eur_to_brl) return amountAbs * eur_to_brl
+    if (from === 'BRL' && to === 'EUR' && brl_to_eur) return amountAbs * brl_to_eur
+    return amountAbs
+  }
 
   console.log('PDF Confirm - Dados recebidos:', { 
     transactionsCount: transactions?.length, 
@@ -52,6 +90,10 @@ export async function POST(request: NextRequest) {
       let precreatedReceiptId: string | null = null
       if (Array.isArray(receipts) && receipts.length === 1) {
         const r = receipts[0]
+        const accountCurrency = (account?.currency || 'EUR').toUpperCase()
+        const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, accountCurrency) : null
+        const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, accountCurrency) : null
+        const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, accountCurrency) : null
         const { data: receiptRow, error: recErr } = await supabase
           .from('receipts')
           .insert({
@@ -59,9 +101,10 @@ export async function POST(request: NextRequest) {
             account_id: accountId,
             merchant_name: r.merchant || 'Estabelecimento',
             receipt_date: r.date || new Date().toISOString().split('T')[0],
-            subtotal: typeof r.subtotal === 'number' ? r.subtotal : null,
-            tax: typeof r.tax === 'number' ? r.tax : null,
-            total: typeof r.total === 'number' ? r.total : null,
+            subtotal: rSubtotal,
+            tax: rTax,
+            total: rTotal,
+            currency: accountCurrency,
             created_at: new Date().toISOString(),
           })
           .select('id')
@@ -180,14 +223,16 @@ export async function POST(request: NextRequest) {
 
         const amt = parseFloat(transaction.amount)
         const isCredit = amt >= 0
+        const accountCurrency = (account?.currency || 'EUR').toUpperCase()
+        const convertedAbs = convertAmount(Math.abs(amt), sourceCurrency, accountCurrency)
         transactionsToInsert.push({
           user_id: user.id,
           account_id: accountId,
           transaction_date: transaction.date,
           merchant_name: transaction.merchant || null,
           category_id: categoryId,
-          amount: Math.abs(amt),
-          currency: account?.currency || 'EUR',
+          amount: convertedAbs,
+          currency: accountCurrency,
           transaction_type: isCredit ? 'credit' : 'debit',
           description: transaction.description || '',
           created_at: new Date().toISOString(),
@@ -228,9 +273,11 @@ export async function POST(request: NextRequest) {
                 const db = new Date(b).toISOString().slice(0,10)
                 return da === db
               }
+              const accountCurrency = (account?.currency || 'EUR').toUpperCase()
+              const rTotal = convertAmount(Math.abs(Number(r.total)), sourceCurrency, accountCurrency)
               // First try exact match by amount and same day
               let found = (insertedTransactions as any[]).find((tx: any) => {
-                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(r.total))
+                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(rTotal))
                 const dateEqual = sameDay(tx.transaction_date, r.date)
                 return amtEqual && dateEqual
               })
@@ -239,13 +286,19 @@ export async function POST(request: NextRequest) {
                 const tol = 0.01
                 found = (insertedTransactions as any[]).find((tx: any) => {
                   const dateEqual = sameDay(tx.transaction_date, r.date)
-                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(r.total)))
+                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(rTotal)))
                   return dateEqual && diff <= tol
                 })
               }
               matchedTxId = found?.id || null
               console.log('PDF Confirm - Transação correspondente encontrada:', matchedTxId)
             }
+
+            // Persist receipt in account currency for consistency
+            const accountCurrency = (account?.currency || 'EUR').toUpperCase()
+            const convertedSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, accountCurrency) : null
+            const convertedTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, accountCurrency) : null
+            const convertedTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, accountCurrency) : null
 
             const { data: receiptRow, error: recErr } = await supabase
               .from('receipts')
@@ -254,9 +307,10 @@ export async function POST(request: NextRequest) {
                 account_id: accountId,
                 merchant_name: r.merchant || 'Estabelecimento',
                 receipt_date: r.date || new Date().toISOString().split('T')[0],
-                subtotal: typeof r.subtotal === 'number' ? r.subtotal : null,
-                tax: typeof r.tax === 'number' ? r.tax : null,
-                total: typeof r.total === 'number' ? r.total : null,
+                subtotal: convertedSubtotal,
+                tax: convertedTax,
+                total: convertedTotal,
+                currency: accountCurrency,
                 created_at: new Date().toISOString(),
               })
               .select()
@@ -310,21 +364,56 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Cartão não encontrado' }, { status: 404 })
       }
 
+      // Caso tenha exatamente 1 recibo, cria primeiro e usa o receipt_id em TODAS as transações de cartão
+      let precreatedReceiptId: string | null = null
+      if (Array.isArray(receipts) && receipts.length === 1) {
+        const r = receipts[0]
+        const cardCurrency = (card.currency || 'EUR').toUpperCase()
+        const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, cardCurrency) : null
+        const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, cardCurrency) : null
+        const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, cardCurrency) : null
+        const { data: receiptRow, error: recErr } = await supabase
+          .from('receipts')
+          .insert({
+            user_id: user.id,
+            // Sem account_id para recibo de cartão
+            merchant_name: r.merchant || 'Estabelecimento',
+            receipt_date: r.date || new Date().toISOString().split('T')[0],
+            subtotal: rSubtotal,
+            tax: rTax,
+            total: rTotal,
+            currency: cardCurrency,
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (!recErr && receiptRow?.id) {
+          precreatedReceiptId = receiptRow.id
+          console.log('PDF Confirm - Recibo de cartão pré-criado:', precreatedReceiptId)
+        } else {
+          console.warn('PDF Confirm - Falha ao pré-criar recibo único (cartão):', recErr)
+        }
+      }
+
   // Preparar transações de cartão (uso positivo; distinguir compra/pagamento pelo sinal)
       const toInsert = transactions.map((tx: any) => {
         const amtNum = Number(tx.amount)
         const isPurchase = amtNum >= 0
+        const cardCurrency = (card.currency || 'EUR').toUpperCase()
+        const convertedAbs = convertAmount(Math.abs(amtNum), sourceCurrency, cardCurrency)
         return {
           user_id: user.id,
           credit_card_id: creditCardId,
           transaction_date: tx.date,
           merchant_name: tx.merchant || tx.description || null,
           description: tx.description || null,
-          amount: Math.abs(amtNum),
-          currency: card.currency || 'EUR',
+          amount: convertedAbs,
+          currency: cardCurrency,
           transaction_type: isPurchase ? 'purchase' : 'payment',
           installments: 1,
           installment_number: 1,
+          receipt_id: precreatedReceiptId,
         }
       })
 
@@ -335,6 +424,70 @@ export async function POST(request: NextRequest) {
       if (insErr) {
         console.error('Erro ao inserir transações de cartão:', insErr)
         return NextResponse.json({ error: 'Erro ao salvar transações' }, { status: 500 })
+      }
+
+      // Salvar recibos e vincular por matching quando houver múltiplos recibos
+      let receiptsSaved = 0
+      if (Array.isArray(receipts) && receipts.length > 0 && !precreatedReceiptId) {
+        for (const r of receipts) {
+          try {
+            const cardCurrency = (card.currency || 'EUR').toUpperCase()
+            const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, cardCurrency) : null
+            const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, cardCurrency) : null
+            const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, cardCurrency) : null
+
+            // Tentar achar transação correspondente por valor e mesma data
+            const sameDay = (a?: string, b?: string) => {
+              if (!a || !b) return false
+              const da = new Date(a).toISOString().slice(0,10)
+              const db = new Date(b).toISOString().slice(0,10)
+              return da === db
+            }
+            let matchedTxId: string | null = null
+            if (Array.isArray(inserted) && typeof rTotal === 'number') {
+              let found = (inserted as any[]).find((tx: any) => {
+                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(rTotal))
+                const dateEqual = sameDay(tx.transaction_date, r.date)
+                return amtEqual && dateEqual
+              })
+              if (!found) {
+                const tol = 0.01
+                found = (inserted as any[]).find((tx: any) => {
+                  const dateEqual = sameDay(tx.transaction_date, r.date)
+                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(rTotal)))
+                  return dateEqual && diff <= tol
+                })
+              }
+              matchedTxId = found?.id || null
+            }
+
+            const { data: receiptRow, error: recErr } = await supabase
+              .from('receipts')
+              .insert({
+                user_id: user.id,
+                merchant_name: r.merchant || 'Estabelecimento',
+                receipt_date: r.date || new Date().toISOString().split('T')[0],
+                subtotal: rSubtotal,
+                tax: rTax,
+                total: rTotal,
+                currency: cardCurrency,
+                created_at: new Date().toISOString(),
+              })
+              .select('id')
+              .single()
+
+            if (!recErr && receiptRow?.id && matchedTxId) {
+              await supabase
+                .from('credit_card_transactions')
+                .update({ receipt_id: receiptRow.id })
+                .eq('id', matchedTxId)
+                .eq('user_id', user.id)
+            }
+            if (!recErr && receiptRow?.id) receiptsSaved++
+          } catch (e) {
+            console.error('Falha ao salvar recibo (cartão):', e)
+          }
+        }
       }
 
       // Atualizar saldo do cartão (compras somam; pagamentos subtraem)
@@ -349,8 +502,10 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json({
         success: true,
-        message: `${(inserted as any[]).length} transações de cartão adicionadas com sucesso`,
+        message: `${(inserted as any[]).length} transações de cartão adicionadas com sucesso${precreatedReceiptId ? ' 🧾 1 recibo salvo' : receiptsSaved ? ` 🧾 ${receiptsSaved} recibo(s) salvo(s)` : ''}`,
         transactions: inserted,
+        receiptsSaved: precreatedReceiptId ? 1 : (receiptsSaved || 0),
+        receiptId: precreatedReceiptId || undefined,
       })
     }
 
@@ -362,9 +517,9 @@ export async function POST(request: NextRequest) {
       
       // Primeiro, criar uma conta padrão se o usuário não tiver nenhuma
       let defaultAccountId = null
-      const { data: userAccounts } = await supabase
+        const { data: userAccounts } = await supabase
         .from('accounts')
-        .select('id, name')
+          .select('id, name, currency')
         .eq('user_id', user.id)
         .order('created_at', { ascending: true })
         .limit(1)
@@ -374,11 +529,11 @@ export async function POST(request: NextRequest) {
         console.log('PDF Confirm - Usando conta existente:', userAccounts[0].name)
       } else {
         // Criar conta padrão para recibos
-        const { data: newAccount, error: accountError } = await supabase
+    const { data: newAccount, error: accountError } = await supabase
           .from('accounts')
           .insert({
             user_id: user.id,
-            account_name: 'Conta Principal',
+      name: 'Conta Principal',
             account_type: 'checking',
             currency: 'EUR',
             balance: 0
@@ -398,17 +553,21 @@ export async function POST(request: NextRequest) {
         let receiptHeaderId = null
         if (Array.isArray(receipts) && receipts.length > 0) {
           const firstReceipt = receipts[0]
-          const { data: receiptRow, error: recErr } = await supabase
+      const accCurrency = (userAccounts?.[0]?.currency || 'EUR').toUpperCase()
+      const rSubtotal = typeof firstReceipt.subtotal === 'number' ? convertAmount(Math.abs(Number(firstReceipt.subtotal)), sourceCurrency, accCurrency) : null
+      const rTax = typeof firstReceipt.tax === 'number' ? convertAmount(Math.abs(Number(firstReceipt.tax)), sourceCurrency, accCurrency) : null
+      const rTotal = typeof firstReceipt.total === 'number' ? convertAmount(Math.abs(Number(firstReceipt.total)), sourceCurrency, accCurrency) : null
+      const { data: receiptRow, error: recErr } = await supabase
             .from('receipts')
             .insert({
               user_id: user.id,
               account_id: defaultAccountId,
-              transaction_id: null, // Will be updated later
               merchant_name: firstReceipt.merchant || 'Estabelecimento',
               receipt_date: firstReceipt.date || new Date().toISOString().split('T')[0],
-              subtotal: typeof firstReceipt.subtotal === 'number' ? firstReceipt.subtotal : null,
-              tax: typeof firstReceipt.tax === 'number' ? firstReceipt.tax : null,
-              total: typeof firstReceipt.total === 'number' ? firstReceipt.total : null,
+        subtotal: rSubtotal,
+        tax: rTax,
+        total: rTotal,
+        currency: accCurrency,
             })
             .select('id')
             .single()
@@ -475,14 +634,16 @@ export async function POST(request: NextRequest) {
 
           const amt = parseFloat(transaction.amount)
           const isCredit = amt >= 0
+          const accCurrency = (userAccounts?.[0]?.currency || 'EUR').toUpperCase()
+          const convertedAbs = convertAmount(Math.abs(amt), sourceCurrency, accCurrency)
           transactionsToInsert.push({
             user_id: user.id,
             account_id: defaultAccountId,
             transaction_date: transaction.date,
             merchant_name: transaction.merchant || null,
             category_id: categoryId,
-            amount: Math.abs(amt),
-            currency: 'EUR',
+            amount: convertedAbs,
+            currency: accCurrency,
             transaction_type: isCredit ? 'credit' : 'debit',
             description: transaction.description || '',
             created_at: new Date().toISOString(),

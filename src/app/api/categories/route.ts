@@ -43,8 +43,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { name, icon, color = '#6b7280', type } = body
+  const body = await request.json()
+  const { name, icon, color = '#6b7280', type, parent_id } = body
 
     // Validate required fields
     if (!name || !type) {
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create new category
-    const { data: category, error } = await supabase
+  const { data: category, error } = await supabase
       .from('categories')
       .insert({
         user_id: user.id,
@@ -70,7 +70,8 @@ export async function POST(request: NextRequest) {
         icon,
         color,
         type,
-        is_default: false
+    is_default: false,
+    parent_id
       })
       .select()
       .single()
