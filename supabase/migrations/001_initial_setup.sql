@@ -1,212 +1,493 @@
--- Migration: Initial setup for Finance AI
--- Created: 2025-08-17
+-- WARNING: This schema is for context only and is not meant to be run.
+-- Table order and constraints may not be valid for execution.
 
--- Enable necessary extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "pgcrypto";
-
--- Users table (extends Supabase auth.users)
-CREATE TABLE public.users (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  email TEXT NOT NULL,
-  full_name TEXT,
-  preferred_currency TEXT DEFAULT 'EUR' CHECK (preferred_currency IN ('EUR', 'BRL')),
-  region TEXT DEFAULT 'PT' CHECK (region IN ('PT', 'BR')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Categories for transactions
-CREATE TABLE public.categories (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  icon TEXT,
-  color TEXT DEFAULT '#6b7280',
-  type TEXT NOT NULL CHECK (type IN ('expense', 'income')),
-  is_default BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Bank accounts
 CREATE TABLE public.accounts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  bank_name TEXT,
-  account_type TEXT CHECK (account_type IN ('checking', 'savings', 'credit', 'investment')),
-  currency TEXT NOT NULL CHECK (currency IN ('EUR', 'BRL')),
-  balance DECIMAL(15,2) DEFAULT 0,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  bank_name text,
+  account_type text CHECK (account_type = ANY (ARRAY['checking'::text, 'savings'::text, 'credit'::text, 'investment'::text])),
+  currency text NOT NULL CHECK (currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  balance numeric DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  auto_created boolean DEFAULT false,
+  account_number_hash text,
+  account_number_encrypted text,
+  balance_encrypted text,
+  sensitive_data_encrypted boolean DEFAULT false,
+  account_masked text,
+  CONSTRAINT accounts_pkey PRIMARY KEY (id),
+  CONSTRAINT accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- Transactions
-CREATE TABLE public.transactions (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  account_id UUID REFERENCES public.accounts(id) ON DELETE CASCADE,
-  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
-  amount DECIMAL(15,2) NOT NULL,
-  currency TEXT NOT NULL CHECK (currency IN ('EUR', 'BRL')),
-  description TEXT NOT NULL,
-  transaction_date DATE NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('expense', 'income', 'transfer')),
-  is_recurring BOOLEAN DEFAULT FALSE,
-  recurring_period TEXT CHECK (recurring_period IN ('weekly', 'monthly', 'yearly')),
-  tags TEXT[],
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.audit_log (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  table_name text NOT NULL,
+  operation text NOT NULL,
+  record_id uuid,
+  ip_address inet,
+  user_agent text,
+  session_id text,
+  sensitive_operation boolean DEFAULT false,
+  timestamp timestamp with time zone DEFAULT now(),
+  additional_data jsonb,
+  CONSTRAINT audit_log_pkey PRIMARY KEY (id),
+  CONSTRAINT audit_log_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
 );
-
--- Fixed costs (recurring expenses)
-CREATE TABLE public.fixed_costs (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  category_id UUID REFERENCES public.categories(id) ON DELETE SET NULL,
-  name TEXT NOT NULL,
-  amount DECIMAL(15,2) NOT NULL,
-  currency TEXT NOT NULL CHECK (currency IN ('EUR', 'BRL')),
-  billing_period TEXT NOT NULL CHECK (billing_period IN ('weekly', 'monthly', 'yearly')),
-  start_date DATE NOT NULL,
-  end_date DATE,
-  is_active BOOLEAN DEFAULT TRUE,
-  next_due_date DATE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.bank_account_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  account_id uuid,
+  statement_id uuid,
+  transaction_date date NOT NULL,
+  merchant_name character varying,
+  category_id uuid,
+  amount numeric NOT NULL,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  transaction_type character varying DEFAULT 'debit'::character varying CHECK (transaction_type::text = ANY (ARRAY['debit'::character varying, 'credit'::character varying, 'transfer'::character varying, 'fee'::character varying, 'interest'::character varying]::text[])),
+  description text NOT NULL,
+  location character varying,
+  reference character varying,
+  pattern_matched character varying,
+  confidence_score integer,
+  balance_after numeric,
+  import_job_id uuid,
+  source_document character varying,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  amount_encrypted text,
+  amount_hash text,
+  merchant_encrypted text,
+  balance_after_encrypted text,
+  reference_encrypted text,
+  sensitive_data_encrypted boolean DEFAULT false,
+  receipt_id uuid,
+  CONSTRAINT bank_account_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT bank_account_transactions_import_job_id_fkey FOREIGN KEY (import_job_id) REFERENCES public.import_jobs(id),
+  CONSTRAINT bank_account_transactions_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
+  CONSTRAINT bank_account_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT bank_account_transactions_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id),
+  CONSTRAINT bank_account_transactions_statement_id_fkey FOREIGN KEY (statement_id) REFERENCES public.bank_statements(id)
 );
-
--- Financial goals
-CREATE TABLE public.goals (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  description TEXT,
-  target_amount DECIMAL(15,2) NOT NULL,
-  current_amount DECIMAL(15,2) DEFAULT 0,
-  currency TEXT NOT NULL CHECK (currency IN ('EUR', 'BRL')),
-  target_date DATE,
-  category TEXT CHECK (category IN ('emergency', 'vacation', 'house', 'car', 'education', 'retirement', 'other')),
-  is_completed BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+CREATE TABLE public.bank_statements (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  account_id uuid,
+  statement_date date NOT NULL,
+  statement_period_start date,
+  statement_period_end date,
+  opening_balance numeric DEFAULT 0,
+  closing_balance numeric DEFAULT 0,
+  total_credits numeric DEFAULT 0,
+  total_debits numeric DEFAULT 0,
+  pdf_file_name character varying,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  is_processed boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT bank_statements_pkey PRIMARY KEY (id),
+  CONSTRAINT bank_statements_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT bank_statements_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id)
 );
-
--- Budgets
 CREATE TABLE public.budgets (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
-  category_id UUID REFERENCES public.categories(id) ON DELETE CASCADE,
-  amount DECIMAL(15,2) NOT NULL,
-  currency TEXT NOT NULL CHECK (currency IN ('EUR', 'BRL')),
-  period TEXT NOT NULL CHECK (period IN ('weekly', 'monthly', 'yearly')),
-  start_date DATE NOT NULL,
-  end_date DATE NOT NULL,
-  spent_amount DECIMAL(15,2) DEFAULT 0,
-  is_active BOOLEAN DEFAULT TRUE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  category_id uuid,
+  amount numeric NOT NULL,
+  currency text NOT NULL CHECK (currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  period text NOT NULL CHECK (period = ANY (ARRAY['weekly'::text, 'monthly'::text, 'yearly'::text])),
+  start_date date NOT NULL,
+  end_date date NOT NULL,
+  spent_amount numeric DEFAULT 0,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  mode text NOT NULL DEFAULT 'absolute'::text CHECK (mode = ANY (ARRAY['absolute'::text, 'percent_income'::text])),
+  percent numeric,
+  CONSTRAINT budgets_pkey PRIMARY KEY (id),
+  CONSTRAINT budgets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT budgets_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id)
 );
-
--- Insert default categories
-INSERT INTO public.categories (name, icon, color, type, is_default) VALUES
--- Expense categories
-('Alimentação', '🍽️', '#ef4444', 'expense', true),
-('Transporte', '🚗', '#f97316', 'expense', true),
-('Habitação', '🏠', '#8b5cf6', 'expense', true),
-('Saúde', '⚕️', '#06b6d4', 'expense', true),
-('Educação', '📚', '#10b981', 'expense', true),
-('Entretenimento', '🎭', '#f59e0b', 'expense', true),
-('Compras', '🛍️', '#ec4899', 'expense', true),
-('Serviços', '🔧', '#6b7280', 'expense', true),
-('Outros Gastos', '📊', '#64748b', 'expense', true),
--- Income categories
-('Salário', '💼', '#22c55e', 'income', true),
-('Freelance', '💻', '#3b82f6', 'income', true),
-('Investimentos', '📈', '#8b5cf6', 'income', true),
-('Outros Rendimentos', '💰', '#10b981', 'income', true);
-
--- Create indexes for better performance
-CREATE INDEX idx_transactions_user_id ON public.transactions(user_id);
-CREATE INDEX idx_transactions_date ON public.transactions(transaction_date);
-CREATE INDEX idx_transactions_category ON public.transactions(category_id);
-CREATE INDEX idx_accounts_user_id ON public.accounts(user_id);
-CREATE INDEX idx_categories_user_id ON public.categories(user_id);
-CREATE INDEX idx_fixed_costs_user_id ON public.fixed_costs(user_id);
-CREATE INDEX idx_goals_user_id ON public.goals(user_id);
-CREATE INDEX idx_budgets_user_id ON public.budgets(user_id);
-
--- Row Level Security (RLS) policies
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.categories ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.accounts ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.fixed_costs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.goals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.budgets ENABLE ROW LEVEL SECURITY;
-
--- Users can only see/edit their own data
-CREATE POLICY "Users can view own profile" ON public.users
-  FOR ALL USING (auth.uid() = id);
-
-CREATE POLICY "Users can view own categories" ON public.categories
-  FOR ALL USING (auth.uid() = user_id OR is_default = true);
-
-CREATE POLICY "Users can manage own accounts" ON public.accounts
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own transactions" ON public.transactions
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own fixed costs" ON public.fixed_costs
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own goals" ON public.goals
-  FOR ALL USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can manage own budgets" ON public.budgets
-  FOR ALL USING (auth.uid() = user_id);
-
--- Function to handle user creation
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS TRIGGER AS $$
-BEGIN
-  INSERT INTO public.users (id, email, full_name)
-  VALUES (new.id, new.email, new.raw_user_meta_data->>'full_name');
-  RETURN new;
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- Trigger to create user profile on signup
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Function to update updated_at timestamps
-CREATE OR REPLACE FUNCTION public.update_updated_at_column()
-RETURNS TRIGGER AS $$
-BEGIN
-  NEW.updated_at = NOW();
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
--- Add updated_at triggers
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON public.users
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_accounts_updated_at BEFORE UPDATE ON public.accounts
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_transactions_updated_at BEFORE UPDATE ON public.transactions
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_fixed_costs_updated_at BEFORE UPDATE ON public.fixed_costs
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_goals_updated_at BEFORE UPDATE ON public.goals
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
-
-CREATE TRIGGER update_budgets_updated_at BEFORE UPDATE ON public.budgets
-  FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
+CREATE TABLE public.categories (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  color text DEFAULT '#6b7280'::text,
+  type text NOT NULL CHECK (type = ANY (ARRAY['expense'::text, 'income'::text])),
+  is_default boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT categories_pkey PRIMARY KEY (id),
+  CONSTRAINT categories_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.credit_card_patterns (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  bank_name character varying NOT NULL,
+  card_brands ARRAY DEFAULT '{}'::text[],
+  identification_keywords ARRAY NOT NULL,
+  confidence_score integer DEFAULT 90,
+  country_code character varying DEFAULT 'PT'::character varying,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT credit_card_patterns_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.credit_card_statements (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  credit_card_id uuid,
+  statement_date date NOT NULL,
+  due_date date NOT NULL,
+  previous_balance numeric DEFAULT 0,
+  payments numeric DEFAULT 0,
+  purchases numeric DEFAULT 0,
+  interest_charges numeric DEFAULT 0,
+  fees numeric DEFAULT 0,
+  total_amount numeric NOT NULL,
+  minimum_payment numeric,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  is_paid boolean DEFAULT false,
+  payment_date date,
+  pdf_file_name character varying,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT credit_card_statements_pkey PRIMARY KEY (id),
+  CONSTRAINT credit_card_statements_credit_card_id_fkey FOREIGN KEY (credit_card_id) REFERENCES public.credit_cards(id),
+  CONSTRAINT credit_card_statements_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.credit_card_transactions (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  credit_card_id uuid,
+  statement_id uuid,
+  transaction_date date NOT NULL,
+  merchant_name character varying NOT NULL,
+  category_id uuid,
+  amount numeric NOT NULL,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  transaction_type character varying DEFAULT 'purchase'::character varying CHECK (transaction_type::text = ANY (ARRAY['purchase'::character varying, 'refund'::character varying, 'fee'::character varying, 'interest'::character varying, 'payment'::character varying]::text[])),
+  installments integer DEFAULT 1,
+  installment_number integer DEFAULT 1,
+  description text,
+  location character varying,
+  pattern_matched character varying,
+  confidence_score integer,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  tan_rate numeric,
+  original_amount numeric,
+  amount_encrypted text,
+  amount_hash text,
+  merchant_encrypted text,
+  sensitive_data_encrypted boolean DEFAULT false,
+  receipt_id uuid,
+  CONSTRAINT credit_card_transactions_pkey PRIMARY KEY (id),
+  CONSTRAINT credit_card_transactions_statement_id_fkey FOREIGN KEY (statement_id) REFERENCES public.credit_card_statements(id),
+  CONSTRAINT credit_card_transactions_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id),
+  CONSTRAINT credit_card_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT credit_card_transactions_credit_card_id_fkey FOREIGN KEY (credit_card_id) REFERENCES public.credit_cards(id)
+);
+CREATE TABLE public.credit_cards (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  card_name character varying NOT NULL,
+  bank_name character varying NOT NULL,
+  card_brand character varying,
+  last_four_digits character varying,
+  card_type character varying DEFAULT 'credit'::character varying CHECK (card_type::text = ANY (ARRAY['credit'::character varying, 'debit'::character varying]::text[])),
+  credit_limit numeric,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  closing_day integer CHECK (closing_day >= 1 AND closing_day <= 31),
+  due_day integer CHECK (due_day >= 1 AND due_day <= 31),
+  current_balance numeric DEFAULT 0,
+  available_limit numeric,
+  annual_fee numeric DEFAULT 0,
+  interest_rate numeric,
+  is_active boolean DEFAULT true,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  auto_created boolean DEFAULT true,
+  card_holder character varying,
+  is_dependent boolean DEFAULT false,
+  parent_card_id uuid,
+  shared_limit_group uuid,
+  card_number_hash text,
+  card_number_encrypted text,
+  credit_limit_encrypted text,
+  balance_encrypted text,
+  sensitive_data_encrypted boolean DEFAULT false,
+  CONSTRAINT credit_cards_pkey PRIMARY KEY (id),
+  CONSTRAINT credit_cards_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT credit_cards_parent_card_id_fkey FOREIGN KEY (parent_card_id) REFERENCES public.credit_cards(id)
+);
+CREATE TABLE public.document_jobs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid NOT NULL,
+  filename text NOT NULL,
+  mimetype text NOT NULL,
+  size_bytes integer NOT NULL,
+  file_base64 text NOT NULL,
+  status text NOT NULL DEFAULT 'queued'::text,
+  error text,
+  result jsonb,
+  created_at timestamp with time zone NOT NULL DEFAULT now(),
+  updated_at timestamp with time zone NOT NULL DEFAULT now(),
+  started_at timestamp with time zone,
+  finished_at timestamp with time zone,
+  CONSTRAINT document_jobs_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.document_processing_history (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  import_job_id uuid,
+  file_name character varying,
+  file_size integer,
+  processing_method character varying,
+  processing_time_ms integer,
+  text_length integer,
+  document_type character varying,
+  bank_name character varying,
+  confidence_score integer,
+  transaction_count integer,
+  card_count integer,
+  installment_count integer,
+  auto_processed boolean DEFAULT false,
+  user_confirmed boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT document_processing_history_pkey PRIMARY KEY (id),
+  CONSTRAINT document_processing_history_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT document_processing_history_import_job_id_fkey FOREIGN KEY (import_job_id) REFERENCES public.import_jobs(id)
+);
+CREATE TABLE public.enhanced_transaction_patterns (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pattern_name character varying NOT NULL,
+  keywords ARRAY NOT NULL,
+  merchant_patterns ARRAY,
+  location_patterns ARRAY,
+  suggested_category character varying NOT NULL,
+  transaction_type character varying,
+  confidence_score integer DEFAULT 90,
+  country_code character varying DEFAULT 'PT'::character varying,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT enhanced_transaction_patterns_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.exchange_rates (
+  rate_date date NOT NULL,
+  eur_to_brl numeric NOT NULL,
+  brl_to_eur numeric NOT NULL,
+  fetched_at timestamp with time zone NOT NULL DEFAULT now(),
+  CONSTRAINT exchange_rates_pkey PRIMARY KEY (rate_date)
+);
+CREATE TABLE public.fixed_cost_entries (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  fixed_cost_id uuid,
+  month_year date NOT NULL,
+  amount numeric NOT NULL,
+  actual_amount numeric,
+  due_date date,
+  payment_date date,
+  status text DEFAULT 'pending'::text CHECK (status = ANY (ARRAY['pending'::text, 'paid'::text, 'overdue'::text])),
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT fixed_cost_entries_pkey PRIMARY KEY (id),
+  CONSTRAINT fixed_cost_entries_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT fixed_cost_entries_fixed_cost_id_fkey FOREIGN KEY (fixed_cost_id) REFERENCES public.fixed_costs(id)
+);
+CREATE TABLE public.fixed_costs (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  category_id uuid,
+  name text NOT NULL,
+  amount numeric NOT NULL,
+  currency text NOT NULL CHECK (currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  billing_period text NOT NULL CHECK (billing_period = ANY (ARRAY['weekly'::text, 'monthly'::text, 'yearly'::text])),
+  start_date date NOT NULL,
+  end_date date,
+  is_active boolean DEFAULT true,
+  next_due_date date,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  due_day integer,
+  cost_type USER-DEFINED DEFAULT 'other'::fixed_cost_type,
+  estimated_amount numeric,
+  provider text,
+  account_number text,
+  auto_payment boolean DEFAULT false,
+  notification_days integer DEFAULT 5,
+  CONSTRAINT fixed_costs_pkey PRIMARY KEY (id),
+  CONSTRAINT fixed_costs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT fixed_costs_category_id_fkey FOREIGN KEY (category_id) REFERENCES public.categories(id)
+);
+CREATE TABLE public.fixed_incomes (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  name character varying NOT NULL,
+  amount numeric NOT NULL,
+  currency character varying NOT NULL DEFAULT 'EUR'::character varying CHECK (currency::text = ANY (ARRAY['EUR'::character varying, 'BRL'::character varying]::text[])),
+  billing_period character varying NOT NULL DEFAULT 'monthly'::character varying CHECK (billing_period::text = ANY (ARRAY['weekly'::character varying, 'monthly'::character varying, 'yearly'::character varying]::text[])),
+  start_date date NOT NULL,
+  end_date date,
+  pay_day integer CHECK (pay_day >= 1 AND pay_day <= 31),
+  next_pay_date date,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  account_id uuid,
+  CONSTRAINT fixed_incomes_pkey PRIMARY KEY (id),
+  CONSTRAINT fixed_incomes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT fixed_incomes_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id)
+);
+CREATE TABLE public.goals (
+  id uuid NOT NULL DEFAULT uuid_generate_v4(),
+  user_id uuid,
+  name text NOT NULL,
+  description text,
+  target_amount numeric NOT NULL,
+  current_amount numeric DEFAULT 0,
+  currency text NOT NULL CHECK (currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  target_date date,
+  category text CHECK (category = ANY (ARRAY['emergency'::text, 'vacation'::text, 'house'::text, 'car'::text, 'education'::text, 'retirement'::text, 'other'::text])),
+  is_completed boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT goals_pkey PRIMARY KEY (id),
+  CONSTRAINT goals_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.google_ai_usage (
+  date date NOT NULL,
+  count integer NOT NULL DEFAULT 0,
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT google_ai_usage_pkey PRIMARY KEY (date)
+);
+CREATE TABLE public.import_jobs (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  status character varying DEFAULT 'pending'::character varying CHECK (status::text = ANY (ARRAY['pending'::character varying, 'processing'::character varying, 'completed'::character varying, 'failed'::character varying, 'cancelled'::character varying]::text[])),
+  file_name character varying,
+  document_type character varying CHECK (document_type::text = ANY (ARRAY['credit_card_statement'::character varying, 'bank_statement'::character varying]::text[])),
+  bank_name character varying,
+  transaction_count integer DEFAULT 0,
+  processed_count integer DEFAULT 0,
+  metadata jsonb,
+  error_message text,
+  started_at timestamp with time zone,
+  completed_at timestamp with time zone,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT import_jobs_pkey PRIMARY KEY (id),
+  CONSTRAINT import_jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.installments (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  transaction_id uuid,
+  credit_card_transaction_id uuid,
+  reference_number character varying,
+  merchant_name character varying,
+  original_amount numeric,
+  installment_amount numeric,
+  current_installment integer,
+  total_installments integer,
+  interest_rate numeric,
+  transaction_date date,
+  first_payment_date date,
+  last_payment_date date,
+  status character varying DEFAULT 'active'::character varying CHECK (status::text = ANY (ARRAY['active'::character varying, 'completed'::character varying, 'cancelled'::character varying]::text[])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT installments_pkey PRIMARY KEY (id),
+  CONSTRAINT installments_credit_card_transaction_id_fkey FOREIGN KEY (credit_card_transaction_id) REFERENCES public.credit_card_transactions(id),
+  CONSTRAINT installments_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.receipt_items_backup_20250824 (
+  id uuid,
+  user_id uuid,
+  receipt_id uuid,
+  line_no integer,
+  description text,
+  quantity numeric,
+  unit_price numeric,
+  tax_rate numeric,
+  tax_amount numeric,
+  total numeric,
+  sku text,
+  category_id uuid,
+  created_at timestamp with time zone,
+  updated_at timestamp with time zone
+);
+CREATE TABLE public.receipts (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid,
+  account_id uuid,
+  merchant_name text,
+  receipt_date date,
+  currency text CHECK (currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  subtotal numeric,
+  tax numeric,
+  total numeric,
+  notes text,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT receipts_pkey PRIMARY KEY (id),
+  CONSTRAINT receipts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id),
+  CONSTRAINT receipts_account_id_fkey FOREIGN KEY (account_id) REFERENCES public.accounts(id)
+);
+CREATE TABLE public.transaction_patterns (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  pattern_name character varying NOT NULL,
+  keywords ARRAY NOT NULL,
+  suggested_category character varying NOT NULL,
+  merchant_type character varying,
+  confidence_score integer DEFAULT 90,
+  country_code character varying DEFAULT 'PT'::character varying,
+  is_active boolean DEFAULT true,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT transaction_patterns_pkey PRIMARY KEY (id)
+);
+CREATE TABLE public.user_consent_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid UNIQUE,
+  auto_process_documents boolean DEFAULT false,
+  auto_create_accounts boolean DEFAULT true,
+  auto_create_cards boolean DEFAULT true,
+  require_confirmation_below_confidence integer DEFAULT 85,
+  privacy_consent_date timestamp with time zone,
+  terms_accepted_date timestamp with time zone,
+  marketing_consent boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_consent_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT user_consent_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.user_security_settings (
+  id uuid NOT NULL DEFAULT gen_random_uuid(),
+  user_id uuid UNIQUE,
+  encryption_enabled boolean DEFAULT false,
+  data_masking_enabled boolean DEFAULT true,
+  key_salt text,
+  security_level integer DEFAULT 1,
+  last_key_rotation timestamp with time zone DEFAULT now(),
+  require_mfa_for_sensitive boolean DEFAULT false,
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT user_security_settings_pkey PRIMARY KEY (id),
+  CONSTRAINT user_security_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id)
+);
+CREATE TABLE public.users (
+  id uuid NOT NULL,
+  email text NOT NULL,
+  full_name text,
+  preferred_currency text DEFAULT 'EUR'::text CHECK (preferred_currency = ANY (ARRAY['EUR'::text, 'BRL'::text])),
+  region text DEFAULT 'PT'::text CHECK (region = ANY (ARRAY['PT'::text, 'BR'::text])),
+  created_at timestamp with time zone DEFAULT now(),
+  updated_at timestamp with time zone DEFAULT now(),
+  CONSTRAINT users_pkey PRIMARY KEY (id),
+  CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id)
+);

@@ -3,11 +3,11 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function GET(request: NextRequest) {
   try {
-  const supabase = await createClient()
-    
+    const supabase = await createClient()
+
     // Get authenticated user
     const { data: { user }, error: userError } = await supabase.auth.getUser()
-    
+
     if (userError || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -17,37 +17,131 @@ export async function GET(request: NextRequest) {
     const offset = parseInt(searchParams.get('offset') || '0')
     const account_id = searchParams.get('account_id')
     const category_id = searchParams.get('category_id')
-    const type = searchParams.get('type')
+    const type = searchParams.get('type') // 'income' | 'expense'
 
-    let query = supabase
-      .from('transactions')
+    // We'll fetch from both sources, merge, sort desc by date+created_at, then paginate
+    const take = Math.max(0, offset) + Math.max(1, limit)
+
+    // Bank account transactions
+  let bankQuery = supabase
+      .from('bank_account_transactions')
       .select(`
-        *,
-        category:categories(name, color, icon),
+        id,
+        account_id,
+        category_id,
+        amount,
+        currency,
+        description,
+    merchant_name,
+        transaction_date,
+        transaction_type,
+        created_at,
+        category:categories(name, color, id),
         account:accounts(name, bank_name)
       `)
       .eq('user_id', user.id)
       .order('transaction_date', { ascending: false })
       .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+      .range(0, take - 1)
 
-    // Apply filters
-    if (account_id) {
-      query = query.eq('account_id', account_id)
-    }
-    if (category_id) {
-      query = query.eq('category_id', category_id)
-    }
+    if (account_id) bankQuery = bankQuery.eq('account_id', account_id)
+    if (category_id) bankQuery = bankQuery.eq('category_id', category_id)
     if (type) {
-      query = query.eq('type', type)
+      const tt = type === 'income' ? 'credit' : type === 'expense' ? 'debit' : undefined
+      if (tt) bankQuery = bankQuery.eq('transaction_type', tt)
     }
 
-    const { data: transactions, error } = await query
+    // Credit card transactions
+  let cardQuery = supabase
+      .from('credit_card_transactions')
+      .select(`
+        id,
+        credit_card_id,
+        category_id,
+        amount,
+        currency,
+        description,
+    merchant_name,
+        transaction_date,
+        transaction_type,
+        created_at,
+        category:categories(name, color, id),
+        card:credit_cards(card_name, bank_name)
+      `)
+      .eq('user_id', user.id)
+      .order('transaction_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .range(0, take - 1)
 
-    if (error) {
-      console.error('Error fetching transactions:', error)
+    if (account_id) cardQuery = cardQuery.eq('credit_card_id', account_id)
+    if (category_id) cardQuery = cardQuery.eq('category_id', category_id)
+    if (type) {
+      // For cards, treat only 'payment' as income; others as expense
+      if (type === 'income') cardQuery = cardQuery.eq('transaction_type', 'payment')
+      else if (type === 'expense') cardQuery = cardQuery.neq('transaction_type', 'payment')
+    }
+
+    const [bankRes, cardRes] = await Promise.all([bankQuery, cardQuery])
+
+    const bankError = bankRes.error
+    const cardError = cardRes.error
+    if (bankError) console.warn('Bank transactions fetch warning:', bankError)
+    if (cardError) console.warn('Card transactions fetch warning:', cardError)
+    if (bankError && cardError) {
       return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 })
     }
+
+    const bankRows = (bankRes.data || []).map((r: any) => ({ ...r }))
+    const cardRows = ((cardRes.data || []) as any[]).map((r: any) => ({
+      // Normalize credit card fields to look like account/account_name
+      id: r.id,
+      account_id: r.credit_card_id, // reuse field name for filtering/compat
+      category_id: r.category_id,
+      amount: r.amount,
+      currency: r.currency,
+      description: r.description ?? r.merchant_name ?? '',
+      transaction_date: r.transaction_date,
+      transaction_type: r.transaction_type,
+      created_at: r.created_at,
+      category: r.category,
+      account: { name: r.card?.card_name ?? 'Credit Card', bank_name: r.card?.bank_name ?? '' },
+      __source: 'credit_card'
+    }))
+
+    const merged = [
+      ...bankRows.map((r: any) => ({ ...r, __source: 'bank' })),
+      ...cardRows,
+    ]
+
+    // Sort by date desc then created_at desc
+    merged.sort((a: any, b: any) => {
+      const da = new Date(a.transaction_date).getTime()
+      const db = new Date(b.transaction_date).getTime()
+      if (db !== da) return db - da
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+
+    const page = merged.slice(offset, offset + limit)
+
+  const transactions = page.map((r: any) => {
+      let ttype: 'income' | 'expense'
+      if (r.__source === 'bank') {
+        ttype = r.transaction_type === 'credit' ? 'income' : 'expense'
+      } else {
+        // credit card
+        ttype = r.transaction_type === 'payment' ? 'income' : 'expense'
+      }
+      return {
+        id: r.id,
+    amount: Math.abs(parseFloat(r.amount)),
+        currency: r.currency,
+    description: r.description ?? r.merchant_name ?? '',
+        transaction_date: r.transaction_date,
+        type: ttype,
+        category: r.category ? { name: r.category.name, color: r.category.color } : null,
+        account: r.account ? { name: r.account.name, bank_name: r.account.bank_name } : null,
+      }
+    })
 
     return NextResponse.json({ transactions })
   } catch (error) {
@@ -68,7 +162,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { 
+  const { 
       account_id, 
       category_id, 
       amount, 
@@ -89,7 +183,7 @@ export async function POST(request: NextRequest) {
 
     // Validate account belongs to user
     const { data: account, error: accountError } = await supabase
-      .from('accounts')
+  .from('accounts')
       .select('id')
       .eq('id', account_id)
       .eq('user_id', user.id)
@@ -114,22 +208,31 @@ export async function POST(request: NextRequest) {
     }
 
     // Create transaction
-    const { data: transaction, error } = await supabase
-      .from('transactions')
+    const isIncome = type === 'income'
+    const { data: inserted, error } = await supabase
+      .from('bank_account_transactions')
       .insert({
         user_id: user.id,
         account_id,
         category_id: category_id || null,
-        amount: parseFloat(amount),
+        amount: Math.abs(parseFloat(amount)),
         currency,
         description,
         transaction_date,
-        type,
+        transaction_type: isIncome ? 'credit' : 'debit',
         tags
       })
       .select(`
-        *,
-        category:categories(name, color, icon),
+        id,
+        account_id,
+        category_id,
+        amount,
+        currency,
+        description,
+        transaction_date,
+        transaction_type,
+        created_at,
+        category:categories(name, color),
         account:accounts(name, bank_name)
       `)
       .single()
@@ -139,7 +242,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create transaction' }, { status: 500 })
     }
 
-    return NextResponse.json({ transaction }, { status: 201 })
+  const transaction = inserted ? { ...inserted, type: isIncome ? 'income' : 'expense' } : null
+  return NextResponse.json({ transaction }, { status: 201 })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -200,14 +304,29 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    const { data: transaction, error } = await supabase
-      .from('transactions')
+    // Map to new schema
+    if (type !== undefined) {
+      (updateData as any).transaction_type = type === 'income' ? 'credit' : 'debit'
+      delete (updateData as any).type
+    }
+    if (updateData.amount !== undefined) updateData.amount = Math.abs(parseFloat(updateData.amount))
+
+    const { data: updated, error } = await supabase
+      .from('bank_account_transactions')
       .update(updateData)
       .eq('id', id)
       .eq('user_id', user.id)
       .select(`
-        *,
-        category:categories(name, color, icon),
+        id,
+        account_id,
+        category_id,
+        amount,
+        currency,
+        description,
+        transaction_date,
+        transaction_type,
+        created_at,
+        category:categories(name, color),
         account:accounts(name, bank_name)
       `)
       .single()
@@ -217,6 +336,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to update transaction' }, { status: 500 })
     }
 
+    const transaction = updated ? { ...updated, type: updated.transaction_type === 'credit' ? 'income' : 'expense' } : null
     return NextResponse.json({ transaction })
   } catch (error) {
     console.error('API Error:', error)
@@ -244,7 +364,7 @@ export async function DELETE(request: NextRequest) {
 
     // Delete transaction
     const { error } = await supabase
-      .from('transactions')
+  .from('bank_account_transactions')
       .delete()
       .eq('id', id)
       .eq('user_id', user.id)

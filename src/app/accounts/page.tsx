@@ -3,14 +3,23 @@
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { useAccounts } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { useCurrency } from '@/hooks/useCurrency'
+import { type SupportedCurrency } from '@/lib/currency'
+import { 
+  displaySecureBalance, 
+  getBalanceRangeClass, 
+  getSecurityStatus,
+  type SecureAccount 
+} from '@/lib/secure-display'
 import { useEffect, useRef, useState } from 'react'
-import { Building2, Eye, EyeOff, Plus, RefreshCw, Wallet, Trash2 } from 'lucide-react'
+import { Building2, Eye, EyeOff, Plus, RefreshCw, Wallet, Trash2, Shield } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 export default function AccountsPage() {
   const { t } = useLanguage()
   const { accounts, loading, error, refetch, createAccount } = useAccounts()
+  const { formatBalance, parse } = useCurrency()
   const router = useRouter()
   const [hideBalances, setHideBalances] = useState<boolean>(false)
   const [isCreating, setIsCreating] = useState<boolean>(false)
@@ -20,8 +29,8 @@ export default function AccountsPage() {
     name: '',
     bank_name: '',
     account_type: 'checking' as 'checking' | 'savings' | 'credit' | 'investment',
-    currency: 'EUR' as 'EUR' | 'BRL',
-    balance: 0
+    currency: 'EUR' as SupportedCurrency,
+    balance: '' as string | number
   })
   const [confirmingDelete, setConfirmingDelete] = useState<{ id: string; name: string } | null>(null)
   const [confirmName, setConfirmName] = useState('')
@@ -38,14 +47,6 @@ export default function AccountsPage() {
     if (typeof window !== 'undefined') localStorage.setItem('hideBalances', next ? '1' : '0')
   }
 
-  const formatBalance = (amount: number, currency: string) => {
-    try {
-      return new Intl.NumberFormat('pt-PT', { style: 'currency', currency }).format(amount)
-    } catch {
-      return `${currency} ${amount.toFixed(2)}`
-    }
-  }
-
   const quickCreate = async () => {
     if (!newAccount.name.trim()) {
       setCreateMsg({ type: 'error', text: 'Informe um nome para a conta.' })
@@ -54,8 +55,11 @@ export default function AccountsPage() {
     }
     try {
       setIsCreating(true)
-      await createAccount(newAccount as any)
-      setNewAccount({ name: '', bank_name: '', account_type: 'checking', currency: 'EUR', balance: 0 })
+      await createAccount({
+        ...newAccount,
+        balance: parse(String(newAccount.balance), newAccount.currency)
+      })
+      setNewAccount({ name: '', bank_name: '', account_type: 'checking', currency: 'EUR', balance: '' })
       setCreateMsg({ type: 'success', text: 'Conta criada com sucesso.' })
     } finally {
       setIsCreating(false)
@@ -132,11 +136,10 @@ export default function AccountsPage() {
               </select>
               <input
                 className="px-3 py-2 rounded-md border"
-                type="number"
-                step="0.01"
+                type="text"
                 placeholder="Saldo inicial"
                 value={newAccount.balance}
-                onChange={(e) => setNewAccount(prev => ({ ...prev, balance: parseFloat(e.target.value || '0') }))}
+                onChange={(e) => setNewAccount(prev => ({ ...prev, balance: e.target.value }))}
               />
             </div>
           </div>
@@ -190,50 +193,51 @@ export default function AccountsPage() {
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {accounts.map((acc: any) => (
-              <Link
-                key={acc.id}
-                href={`/accounts/${acc.id}`}
-                className="rounded-lg border bg-white p-4 hover:shadow-md transition-shadow block group"
-              >
-                <div className="flex items-start justify-between">
-                  <div>
-                    <div className="text-sm text-gray-500">{acc.bank_name || 'Conta'}</div>
-                    <div className="font-medium">{acc.name}</div>
+            {accounts.map((acc: any) => {
+              
+              return (
+                <Link
+                  key={acc.id}
+                  href={`/accounts/${acc.id}`}
+                  className="rounded-lg border bg-white p-4 hover:shadow-md transition-shadow block group"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-sm text-gray-500 flex items-center gap-1">
+                        {acc.bank_name || 'Conta'}
+                      </div>
+                      <div className="font-medium">{acc.name}</div>
+                    </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); router.push(`/pdf-import?account_id=${acc.id}`) }}
-                    className="text-xs px-2 py-1 rounded-md border hover:bg-gray-50 opacity-0 group-hover:opacity-100 transition-opacity"
-                    title="Importar extrato PDF para esta conta"
-                  >
-                    PDF
-                  </button>
-                </div>
-                <div className="mt-3 text-2xl font-semibold tracking-tight">
-                  {hideBalances ? (
-                    <span className="select-none">••••••</span>
-                  ) : (
-                    formatBalance(acc.balance, acc.currency)
+                  <div className={`mt-3 text-2xl font-semibold tracking-tight`}>
+                    {hideBalances ? (
+                      <span className="select-none">••••••</span>
+                    ) : (
+                      formatBalance(acc.balance || 0, acc.currency as SupportedCurrency)
+                    )}
+                  </div>
+                  {acc.last_update && (
+                    <div className="mt-1 text-xs text-gray-500">
+                      Atualizado {new Date(acc.last_update).toLocaleDateString('pt-PT')}
+                    </div>
                   )}
-                </div>
-                {acc.last_update && (
-                  <div className="mt-1 text-xs text-gray-500">
-                    Atualizado {new Date(acc.last_update).toLocaleDateString('pt-PT')}
+                  <div className="mt-2 flex items-center justify-between">
+                    <div className="text-xs text-green-600 flex items-center">
+                      <Shield className="h-3 w-3 mr-1" />
+                      Dados protegidos
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmingDelete({ id: acc.id, name: acc.name }); setConfirmName('') }}
+                      className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
+                      title="Eliminar conta"
+                    >
+                      <Trash2 className="h-4 w-4" /> Remover
+                    </button>
                   </div>
-                )}
-                <div className="mt-3 flex justify-end">
-                  <button
-                    type="button"
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirmingDelete({ id: acc.id, name: acc.name }); setConfirmName('') }}
-                    className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
-                    title="Eliminar conta"
-                  >
-                    <Trash2 className="h-4 w-4" /> Remover
-                  </button>
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
 

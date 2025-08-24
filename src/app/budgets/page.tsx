@@ -52,8 +52,10 @@ export default function BudgetsPage(){
         .or('user_id.eq.'+user!.id+',is_default.eq.true')
       setCategories((cats||[]).filter((c:any)=>c.type==='expense'))
 
-      const { data } = await supabase.from('budget_vs_actual').select('*').eq('user_id', user!.id)
-      setBudgets(data||[])
+  // Use API to compute Budget vs Actual without SQL view
+  const res = await fetch(`/api/dashboard?type=budget-vs-actual`, { cache: 'no-store' })
+  const json = await res.json()
+  setBudgets(json?.data||[])
     } finally {
       setLoading(false)
     }
@@ -65,13 +67,13 @@ export default function BudgetsPage(){
       id: row.id,
       user_id: user!.id,
       category_id: row.category_id,
-      amount: row.budget_amount,
+      amount: row.budgeted,
       currency: row.currency,
       period: row.period,
       mode: 'absolute',
       percent: undefined,
     } as any)
-    setForm({ category_id: row.category_id, amount: row.budget_amount, currency: row.currency, period: row.period, mode: 'absolute', percent: undefined })
+    setForm({ category_id: row.category_id, amount: row.budgeted, currency: row.currency, period: row.period, mode: 'absolute', percent: undefined })
     setOpen(true)
   }
 
@@ -168,9 +170,9 @@ export default function BudgetsPage(){
               <tbody>
                 {budgets.map((b:any)=> (
                   <tr key={b.id} className="border-b last:border-0">
-                    <td className="p-2">{b.category_name || 'Outros'}</td>
-                    <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.budget_amount||0)}</td>
-                    <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.spent_amount||0)}</td>
+                    <td className="p-2">{b.category || 'Outros'}</td>
+                    <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.budgeted||0)}</td>
+                    <td className="p-2 text-right">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:b.currency}).format(b.actual||0)}</td>
                     <td className={`p-2 text-right ${b.usage_percentage>=100?'text-red-600':b.usage_percentage>=80?'text-amber-600':'text-green-600'}`}>{(b.usage_percentage||0).toFixed(0)}%</td>
                     <td className="p-2 text-right">
                       <div className="inline-flex gap-2">

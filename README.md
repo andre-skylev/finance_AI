@@ -1,205 +1,183 @@
-# Finance AI - WebApp de Gestão Financeira Multi-Regional com IA
+# Supabase CLI
 
-Uma aplicação web completa de gestão financeira pessoal com inteligência artificial, desenvolvida com Next.js 15, React 19, TypeScript e Supabase.
+[![Coverage Status](https://coveralls.io/repos/github/supabase/cli/badge.svg?branch=main)](https://coveralls.io/github/supabase/cli?branch=main) [![Bitbucket Pipelines](https://img.shields.io/bitbucket/pipelines/supabase-cli/setup-cli/master?style=flat-square&label=Bitbucket%20Canary)](https://bitbucket.org/supabase-cli/setup-cli/pipelines) [![Gitlab Pipeline Status](https://img.shields.io/gitlab/pipeline-status/sweatybridge%2Fsetup-cli?label=Gitlab%20Canary)
+](https://gitlab.com/sweatybridge/setup-cli/-/pipelines)
 
-## 🚀 Características Principais
+[Supabase](https://supabase.io) is an open source Firebase alternative. We're building the features of Firebase using enterprise-grade open source tools.
 
-### 📊 Dashboard Interativo
-- Visão geral do património financeiro
-- Gráficos interativos de evolução do património líquido
-- Análise de gastos por categoria
-- Transações recentes
+This repository contains all the functionality for Supabase CLI.
 
-### 💰 Gestão de Transações
-- Adicionar/editar/eliminar transações
-- Categorização automática (receitas/despesas)
-- Suporte multi-moeda (EUR/BRL)
-- Filtros avançados e pesquisa
+- [x] Running Supabase locally
+- [x] Managing database migrations
+- [x] Creating and deploying Supabase Functions
+- [x] Generating types directly from your database schema
+- [x] Making authenticated HTTP requests to [Management API](https://supabase.com/docs/reference/api/introduction)
 
-### 🔄 Custos Fixos
-- Gestão de despesas recorrentes
-- Períodos configuráveis (semanal, mensal, anual)
-- Cálculo automático de próximas cobranças
-- Estimativa de impacto mensal
+## Getting started
 
-### 🎯 Objetivos Financeiros
-- Definição de metas financeiras
-- Acompanhamento de progresso em tempo real
-- Datas-alvo e notificações
-- Visualização de percentagem de conclusão
+### Install the CLI
 
-### 🏦 Gestão de Contas
-- Múltiplas contas bancárias
-- Diferentes tipos (corrente, poupança, crédito, investimento)
-- Saldos em tempo real
-- Ativação/desativação de contas
+Available via [NPM](https://www.npmjs.com) as dev dependency. To install:
 
-### 🔐 Autenticação e Segurança
-- Sistema de login/registo seguro
-- Autenticação via Supabase
-- Row Level Security (RLS)
-- Proteção de rotas
-
-### 🌍 Multi-Regional
-- Suporte a EUR e BRL
-- Interface em português
-- Formatação de moeda por região
-- Configurações personalizáveis
-
-## 🛠️ Tecnologias Utilizadas
-
-- **Frontend**: Next.js 15.4.6, React 19.1.1, TypeScript
-- **Styling**: Tailwind CSS
-- **Base de Dados**: Supabase (PostgreSQL)
-- **Autenticação**: Supabase Auth
-- **Gráficos**: Chart.js + react-chartjs-2
-- **Ícones**: Lucide React
-- **Deploy**: Vercel (recomendado)
-
-## 📦 Instalação
-
-1. **Clone o repositório**
 ```bash
-git clone https://github.com/your-username/finance_AI.git
-cd finance_AI
+npm i supabase --save-dev
 ```
 
-2. **Instale as dependências**
+To install the beta release channel:
+
 ```bash
-npm install
+npm i supabase@beta --save-dev
 ```
 
-3. **Configure as variáveis de ambiente**
+When installing with yarn 4, you need to disable experimental fetch with the following nodejs config.
+
+```
+NODE_OPTIONS=--no-experimental-fetch yarn add supabase
+```
+
+> **Note**
+For Bun versions below v1.0.17, you must add `supabase` as a [trusted dependency](https://bun.sh/guides/install/trusted) before running `bun add -D supabase`.
+
+<details>
+  <summary><b>macOS</b></summary>
+
+  Available via [Homebrew](https://brew.sh). To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To install the beta release channel:
+  
+  ```sh
+  brew install supabase/tap/supabase-beta
+  brew link --overwrite supabase-beta
+  ```
+  
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Windows</b></summary>
+
+  Available via [Scoop](https://scoop.sh). To install:
+
+  ```powershell
+  scoop bucket add supabase https://github.com/supabase/scoop-bucket.git
+  scoop install supabase
+  ```
+
+  To upgrade:
+
+  ```powershell
+  scoop update supabase
+  ```
+</details>
+
+<details>
+  <summary><b>Linux</b></summary>
+
+  Available via [Homebrew](https://brew.sh) and Linux packages.
+
+  #### via Homebrew
+
+  To install:
+
+  ```sh
+  brew install supabase/tap/supabase
+  ```
+
+  To upgrade:
+
+  ```sh
+  brew upgrade supabase
+  ```
+
+  #### via Linux packages
+
+  Linux packages are provided in [Releases](https://github.com/supabase/cli/releases). To install, download the `.apk`/`.deb`/`.rpm`/`.pkg.tar.zst` file depending on your package manager and run the respective commands.
+
+  ```sh
+  sudo apk add --allow-untrusted <...>.apk
+  ```
+
+  ```sh
+  sudo dpkg -i <...>.deb
+  ```
+
+  ```sh
+  sudo rpm -i <...>.rpm
+  ```
+
+  ```sh
+  sudo pacman -U <...>.pkg.tar.zst
+  ```
+</details>
+
+<details>
+  <summary><b>Other Platforms</b></summary>
+
+  You can also install the CLI via [go modules](https://go.dev/ref/mod#go-install) without the help of package managers.
+
+  ```sh
+  go install github.com/supabase/cli@latest
+  ```
+
+  Add a symlink to the binary in `$PATH` for easier access:
+
+  ```sh
+  ln -s "$(go env GOPATH)/bin/cli" /usr/bin/supabase
+  ```
+
+  This works on other non-standard Linux distros.
+</details>
+
+<details>
+  <summary><b>Community Maintained Packages</b></summary>
+
+  Available via [pkgx](https://pkgx.sh/). Package script [here](https://github.com/pkgxdev/pantry/blob/main/projects/supabase.com/cli/package.yml).
+  To install in your working directory:
+
+  ```bash
+  pkgx install supabase
+  ```
+
+  Available via [Nixpkgs](https://nixos.org/). Package script [here](https://github.com/NixOS/nixpkgs/blob/master/pkgs/development/tools/supabase-cli/default.nix).
+</details>
+
+### Run the CLI
+
 ```bash
-cp .env.example .env.local
+supabase bootstrap
 ```
 
-Edite `.env.local` com as suas credenciais do Supabase:
-```env
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-```
+Or using npx:
 
-4. **Configure a base de dados**
-
-Execute as migrações no Supabase SQL Editor:
-```sql
--- Copie e execute o conteúdo de supabase/migrations/001_initial_setup.sql
-```
-
-5. **Inicie o servidor de desenvolvimento**
 ```bash
-npm run dev
+npx supabase bootstrap
 ```
 
-A aplicação estará disponível em `http://localhost:3000`
+The bootstrap command will guide you through the process of setting up a Supabase project using one of the [starter](https://github.com/supabase-community/supabase-samples/blob/main/samples.json) templates.
 
-## 🗄️ Estrutura da Base de Dados
+## Docs
 
-### Tabelas Principais
+Command & config reference can be found [here](https://supabase.com/docs/reference/cli/about).
 
-- **users**: Perfis de utilizador (extensão do auth.users)
-- **accounts**: Contas bancárias do utilizador
-- **categories**: Categorias de transações
-- **transactions**: Registos de receitas e despesas
-- **fixed_costs**: Custos recorrentes
-- **goals**: Objetivos financeiros
-- **budgets**: Orçamentos por categoria
+## Breaking changes
 
-### Funcionalidades de Segurança
+We follow semantic versioning for changes that directly impact CLI commands, flags, and configurations.
 
-- Row Level Security (RLS) em todas as tabelas
-- Políticas de acesso baseadas no utilizador autenticado
-- Triggers automáticos para auditoria
+However, due to dependencies on other service images, we cannot guarantee that schema migrations, seed.sql, and generated types will always work for the same CLI major version. If you need such guarantees, we encourage you to pin a specific version of CLI in package.json.
 
-## 🎨 Funcionalidades da Interface
+## Developing
 
-### Dashboard
-- Cards de resumo (património, receitas, despesas)
-- Gráfico de linha para evolução temporal
-- Gráfico circular para distribuição de gastos
-- Lista de transações recentes
+To run from source:
 
-### Transações
-- Formulário completo com validação
-- Filtros por tipo, categoria, conta e data
-- Pesquisa em tempo real
-- Operações CRUD completas
-
-### Custos Fixos
-- Formulário de criação com períodos flexíveis
-- Cálculo automático de próximas cobranças
-- Estimativa de impacto mensal total
-- Ativação/desativação individual
-
-### Objetivos
-- Definição de metas com valores-alvo
-- Atualização de progresso em tempo real
-- Barras de progresso visuais
-- Indicadores de prazo
-
-### Configurações
-- Gestão de contas bancárias
-- Preferências de moeda e idioma
-- Configurações de notificação
-- Perfil de utilizador
-
-## 🚀 Deploy
-
-### Vercel (Recomendado)
-1. Conecte o repositório ao Vercel
-2. Configure as variáveis de ambiente
-3. Deploy automático
-
-### Manual
-```bash
-npm run build
-npm start
+```sh
+# Go >= 1.22
+go run . help
 ```
-
-## 🔧 Scripts Disponíveis
-
-- `npm run dev` - Servidor de desenvolvimento
-- `npm run build` - Build de produção
-- `npm run start` - Servidor de produção
-- `npm run lint` - Verificação de código
-
-## 📱 Responsividade
-
-A aplicação é totalmente responsiva e otimizada para:
-- Desktop (1200px+)
-- Tablet (768px - 1199px)
-- Mobile (< 768px)
-
-## 🤝 Contribuição
-
-1. Fork o projeto
-2. Crie uma branch para a sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit as suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
-
-## 📄 Licença
-
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
-
-## 🆘 Suporte
-
-Para questões e suporte:
-- Abra uma issue no GitHub
-- Email: your-email@example.com
-
-## 🎯 Roadmap
-
-- [ ] Integração com IA para insights financeiros
-- [ ] Importação de extratos bancários
-- [ ] Relatórios avançados em PDF
-- [ ] Notificações push
-- [ ] App mobile React Native
-- [ ] Integração com Open Banking
-- [ ] Análise preditiva de gastos
-- [ ] Recomendações de investimento
-
----
-
-Desenvolvido com ❤️ para ajudar na gestão financeira pessoal.

@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/hooks/useCurrency';
 import { TrendingUp, TrendingDown, DollarSign, CreditCard, Target, PiggyBank } from 'lucide-react';
-import { useCurrency } from '@/contexts/CurrencyContext';
 
 type Kpis = {
   totalBalance: number;
@@ -19,7 +19,7 @@ type Kpis = {
 
 export function FinancialKPIs() {
   const { t } = useLanguage();
-  const { displayCurrency, convert } = useCurrency();
+  const { displayCurrency, formatWithConversion } = useCurrency();
   const [kpis, setKpis] = useState<Kpis | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -28,7 +28,7 @@ export function FinancialKPIs() {
     let cancelled = false
     const load = async () => {
       try {
-        const res = await fetch(`/api/dashboard?type=financial-kpis&currency=${displayCurrency}`)
+        const res = await fetch(`/api/dashboard?type=financial-kpis&currency=EUR`) // Sempre buscar em EUR e converter localmente
         if (!res.ok) throw new Error('failed')
         const j = await res.json()
         if (!cancelled) setKpis(j.kpis)
@@ -40,13 +40,12 @@ export function FinancialKPIs() {
     }
     load()
     return () => { cancelled = true }
-  }, [displayCurrency])
+  }, []) // Remover displayCurrency da dependência para evitar reloads desnecessários
 
-  const fmt = useMemo(() => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }), [displayCurrency])
   const items = [
     {
       title: t('dashboard.netWorth'),
-      value: kpis ? fmt.format(kpis.totalBalance) : '—',
+      value: kpis ? formatWithConversion(kpis.totalBalance, 'EUR') : '—',
       change: kpis ? `${kpis.totalBalanceChange.toFixed(1)}%` : '—',
       positive: (kpis?.totalBalanceChange || 0) >= 0,
       icon: PiggyBank,
@@ -54,7 +53,7 @@ export function FinancialKPIs() {
     },
     {
       title: t('dashboard.income'),
-      value: kpis ? fmt.format(kpis.monthlyIncome) : '—',
+      value: kpis ? formatWithConversion(kpis.monthlyIncome, 'EUR') : '—',
       change: kpis ? `${kpis.monthlyIncomeChange.toFixed(1)}%` : '—',
       positive: (kpis?.monthlyIncomeChange || 0) >= 0,
       icon: DollarSign,
@@ -62,7 +61,7 @@ export function FinancialKPIs() {
     },
     {
       title: t('dashboard.expenses'),
-      value: kpis ? fmt.format(kpis.monthlyExpenses) : '—',
+      value: kpis ? formatWithConversion(kpis.monthlyExpenses, 'EUR') : '—',
       change: kpis ? `${kpis.monthlyExpensesChange.toFixed(1)}%` : '—',
       positive: (kpis?.monthlyExpensesChange || 0) < 0 ? true : false,
       icon: CreditCard,

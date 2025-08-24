@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
   if ((!transactions || !Array.isArray(transactions)) && !(target && String(target).startsWith('rec'))) {
       return NextResponse.json({ error: 'Dados inválidos' }, { status: 400 })
     }
-    // Roteamento por destino: conta bancária (acc:ID) ou cartão de crédito (cc:ID)
+  // Roteamento por destino: conta bancária (acc:ID) ou cartão de crédito (cc:ID)
     if (typeof target === 'string' && target.startsWith('acc:')) {
       const accountId = target.slice(4)
       // Verificar se a conta pertence ao usuário
@@ -39,34 +39,136 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Conta não encontrada' }, { status: 404 })
       }
 
-      // Buscar categorias para mapear
+      // Buscar categorias para mapear (inclui tipo para criação correta)
       const { data: categories } = await supabase
         .from('categories')
-        .select('id, name')
+        .select('id, name, type, is_default')
 
       console.log('PDF Confirm - Categorias encontradas:', categories?.length)
-      const categoryMap = new Map(categories?.map(cat => [cat.name.toLowerCase(), cat.id]) || [])
+  const categoryMap = new Map(categories?.map(cat => [cat.name.toLowerCase(), { id: cat.id, type: cat.type, is_default: cat.is_default }]) || [])
       console.log('PDF Confirm - Mapa de categorias:', Array.from(categoryMap.entries()))
 
-      // Preparar transações para inserção
-      const transactionsToInsert = transactions.map((transaction: any) => {
-        // Mapear categoria sugerida para ID
-        let categoryId = null
+      // Caso tenha exatamente 1 recibo, cria primeiro e usa o receipt_id em TODAS as transações
+      let precreatedReceiptId: string | null = null
+      if (Array.isArray(receipts) && receipts.length === 1) {
+        const r = receipts[0]
+        const { data: receiptRow, error: recErr } = await supabase
+          .from('receipts')
+          .insert({
+            user_id: user.id,
+            account_id: accountId,
+            merchant_name: r.merchant || 'Estabelecimento',
+            receipt_date: r.date || new Date().toISOString().split('T')[0],
+            subtotal: typeof r.subtotal === 'number' ? r.subtotal : null,
+            tax: typeof r.tax === 'number' ? r.tax : null,
+            total: typeof r.total === 'number' ? r.total : null,
+            created_at: new Date().toISOString(),
+          })
+          .select('id')
+          .single()
+
+        if (!recErr && receiptRow?.id) {
+          precreatedReceiptId = receiptRow.id
+          console.log('PDF Confirm - Recibo pré-criado para vincular transações:', precreatedReceiptId)
+        } else {
+          console.warn('PDF Confirm - Falha ao pré-criar recibo único:', recErr)
+        }
+      }
+
+      // Preparar transações para inserção (apenas tabela bank_account_transactions)
+  const transactionsToInsert: any[] = []
+  for (const transaction of transactions as any[]) {
+        // Mapear categoria sugerida para ID; criar se não existir
+  let categoryId: string | null = null
         if (transaction.suggestedCategory) {
           const suggestedLower = String(transaction.suggestedCategory).toLowerCase()
           console.log('PDF Confirm - Procurando categoria:', suggestedLower)
           
           // Busca exata primeiro
           if (categoryMap.has(suggestedLower)) {
-            categoryId = categoryMap.get(suggestedLower)
+            categoryId = categoryMap.get(suggestedLower)!.id
             console.log('PDF Confirm - Categoria encontrada (exata):', categoryId)
           } else {
             // Busca parcial
-            for (const [catName, catId] of categoryMap.entries()) {
+            let parentKey: string | null = null
+            for (const [catName, catInfo] of categoryMap.entries()) {
               if (catName.includes(suggestedLower) || suggestedLower.includes(catName)) {
-                categoryId = catId
+                categoryId = catInfo.id
                 console.log('PDF Confirm - Categoria encontrada (parcial):', catName, '->', categoryId)
                 break
+              }
+              // Detect parent like "supermercado - higiene e limpeza": capture before hyphen
+              if (!parentKey && suggestedLower.includes(catName) && /\s-\s/.test(String(transaction.suggestedCategory))) {
+                parentKey = catName
+              }
+            }
+            // Se não encontrou, criar categoria nova do tipo correto (por padrão 'expense')
+            if (!categoryId) {
+              const isIncome = Number(transaction.amount) >= 0
+              const parent = parentKey ? categoryMap.get(parentKey) : null
+              const newName = String(transaction.suggestedCategory).trim()
+              const newType = isIncome ? 'income' : 'expense'
+              // Handle subcategory syntax: "Parent - Child"
+              let parentId: string | null = null
+              const split = newName.split(' - ')
+              if (split.length >= 2) {
+                const parentName = split[0].trim().toLowerCase()
+                const childName = split.slice(1).join(' - ').trim()
+                // Ensure parent exists or create it
+                if (categoryMap.has(parentName)) {
+                  parentId = categoryMap.get(parentName)!.id
+                } else {
+                  const { data: createdParent, error: parentErr } = await supabase
+                    .from('categories')
+                    .insert({ user_id: user.id, name: split[0].trim(), type: newType, is_default: false, color: '#6b7280' })
+                    .select('id')
+                    .single()
+                  if (!parentErr && createdParent?.id) {
+                    parentId = createdParent.id
+                    categoryMap.set(parentName, { id: parentId, type: newType, is_default: false })
+                  }
+                }
+                // Create child with parent_id
+                const { data: created, error: catErr } = await supabase
+                  .from('categories')
+                  .insert({
+                    user_id: user.id,
+                    name: childName,
+                    type: newType,
+                    is_default: false,
+                    color: '#6b7280',
+                    parent_id: parentId
+                  })
+                  .select('id')
+                  .single()
+                if (!catErr && created?.id) {
+                  categoryId = created.id
+                  categoryMap.set(childName.toLowerCase(), { id: created.id, type: newType, is_default: false })
+                  console.log('PDF Confirm - Subcategoria criada:', childName, '->', categoryId, 'parent', parentId)
+                } else {
+                  console.warn('PDF Confirm - Falha ao criar subcategoria:', catErr)
+                }
+              } else {
+                // Create as a top-level category
+                const { data: created, error: catErr } = await supabase
+                .from('categories')
+                .insert({
+                  user_id: user.id,
+                  name: newName,
+                  type: newType,
+                  is_default: false,
+                  color: '#6b7280'
+                })
+                .select('id')
+                  .single()
+                if (!catErr && created?.id) {
+                  categoryId = created.id
+                  // Atualiza cache em memória
+                  categoryMap.set(newName.toLowerCase(), { id: created.id, type: newType, is_default: false })
+                  console.log('PDF Confirm - Categoria criada:', newName, '->', categoryId)
+                } else {
+                  console.warn('PDF Confirm - Falha ao criar categoria sugerida:', catErr)
+                }
               }
             }
           }
@@ -77,38 +179,46 @@ export async function POST(request: NextRequest) {
         }
 
         const amt = parseFloat(transaction.amount)
-        return {
+        const isCredit = amt >= 0
+        transactionsToInsert.push({
           user_id: user.id,
           account_id: accountId,
-          amount: amt,
-          description: transaction.description,
-          category_id: categoryId,
           transaction_date: transaction.date,
+          merchant_name: transaction.merchant || null,
+          category_id: categoryId,
+          amount: Math.abs(amt),
           currency: account?.currency || 'EUR',
-          type: amt >= 0 ? 'income' : 'expense',
+          transaction_type: isCredit ? 'credit' : 'debit',
+          description: transaction.description || '',
           created_at: new Date().toISOString(),
-        }
-      })
+          receipt_id: precreatedReceiptId,
+        })
+      }
 
       console.log('PDF Confirm - Transações preparadas para inserção:', JSON.stringify(transactionsToInsert, null, 2))
 
+      // Salvar em bank_account_transactions (modelo consolidado)
       const { data: insertedTransactions, error: insertError } = await supabase
-        .from('transactions')
+        .from('bank_account_transactions')
         .insert(transactionsToInsert)
         .select()
 
-      console.log('PDF Confirm - Resultado da inserção:', { insertedTransactions, insertError })
+      console.log('PDF Confirm - Resultado da inserção em transactions:', { insertedTransactions, insertError })
 
       if (insertError) {
         console.error('Erro ao inserir transações:', insertError)
         return NextResponse.json({ error: 'Erro ao salvar transações' }, { status: 500 })
       }
 
-      // Salvar recibos vinculados à conta (opcional)
+  // Salvar recibos vinculados à conta - se houver 1 recibo pré-criado acima, pular reinserção
       let receiptsSaved = 0
-      if (Array.isArray(receipts) && receipts.length > 0) {
+      let receiptId = null
+      
+  if (Array.isArray(receipts) && receipts.length > 0 && !precreatedReceiptId) {
         for (const r of receipts) {
           try {
+            console.log('PDF Confirm - Salvando recibo:', r)
+            
             // Associar por total e data
             let matchedTxId: string | null = null
             if (Array.isArray(insertedTransactions) && typeof r.total === 'number') {
@@ -118,12 +228,23 @@ export async function POST(request: NextRequest) {
                 const db = new Date(b).toISOString().slice(0,10)
                 return da === db
               }
-              const found = insertedTransactions.find((tx: any) => {
-                const amtEqual = Number(tx.amount) === Number(r.total)
-                const dateEqual = sameDay(tx.date || tx.transaction_date, r.date)
+              // First try exact match by amount and same day
+              let found = (insertedTransactions as any[]).find((tx: any) => {
+                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(r.total))
+                const dateEqual = sameDay(tx.transaction_date, r.date)
                 return amtEqual && dateEqual
               })
+              // Then try tolerance match (cent-level) on same day
+              if (!found) {
+                const tol = 0.01
+                found = (insertedTransactions as any[]).find((tx: any) => {
+                  const dateEqual = sameDay(tx.transaction_date, r.date)
+                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(r.total)))
+                  return dateEqual && diff <= tol
+                })
+              }
               matchedTxId = found?.id || null
+              console.log('PDF Confirm - Transação correspondente encontrada:', matchedTxId)
             }
 
             const { data: receiptRow, error: recErr } = await supabase
@@ -131,33 +252,28 @@ export async function POST(request: NextRequest) {
               .insert({
                 user_id: user.id,
                 account_id: accountId,
-                transaction_id: matchedTxId,
-                merchant_name: r.merchant || null,
-                receipt_date: r.date || null,
+                merchant_name: r.merchant || 'Estabelecimento',
+                receipt_date: r.date || new Date().toISOString().split('T')[0],
                 subtotal: typeof r.subtotal === 'number' ? r.subtotal : null,
                 tax: typeof r.tax === 'number' ? r.tax : null,
                 total: typeof r.total === 'number' ? r.total : null,
+                created_at: new Date().toISOString(),
               })
-              .select('id')
+              .select()
               .single()
 
-            if (!recErr && receiptRow?.id && Array.isArray(r.items)) {
-              const itemsToInsert = r.items.map((it: any, index: number) => ({
-                user_id: user.id,
-                receipt_id: receiptRow.id,
-                line_no: index + 1,
-                description: String(it.description || 'Item'),
-                quantity: typeof it.quantity === 'number' ? it.quantity : null,
-                unit_price: typeof it.unitPrice === 'number' ? it.unitPrice : null,
-                tax_rate: typeof it.taxRate === 'number' ? it.taxRate : null,
-                tax_amount: typeof it.taxAmount === 'number' ? it.taxAmount : null,
-                total: typeof it.total === 'number' ? it.total : null,
-                sku: it.code ? String(it.code) : null,
-              }))
-              const { error: itemsErr } = await supabase
-                .from('receipt_items')
-                .insert(itemsToInsert)
-              if (itemsErr) console.error('Erro ao inserir itens do recibo:', itemsErr)
+            console.log('PDF Confirm - Resultado inserção recibo:', { receiptRow, recErr })
+
+            if (!recErr && receiptRow?.id) {
+              receiptId = receiptRow.id
+              // Atualizar a transação correspondente para vincular o recibo
+              if (matchedTxId) {
+                await supabase
+                  .from('bank_account_transactions')
+                  .update({ receipt_id: receiptRow.id })
+                  .eq('id', matchedTxId)
+                  .eq('user_id', user.id)
+              }
             }
             receiptsSaved++
           } catch (e) {
@@ -166,11 +282,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Se recibo foi pré-criado, marcar como salvo e repassar id para resposta
+      if (precreatedReceiptId) {
+        receiptsSaved = 1
+        receiptId = precreatedReceiptId
+      }
+
       return NextResponse.json({
         success: true,
-        message: `${(insertedTransactions as any[]).length} transações adicionadas com sucesso${receiptsSaved ? `, ${receiptsSaved} recibo(s) salvo(s)` : ''}`,
+        message: `✅ ${(insertedTransactions as any[]).length} transação(ões) adicionada(s) à conta com sucesso!${receiptsSaved ? ` 🧾 ${receiptsSaved} recibo(s) salvo(s) - veja na página de Recibos.` : ''}`,
         transactions: insertedTransactions,
-        receiptsSaved
+        receiptsSaved,
+        receiptId
       })
     }
 
@@ -187,7 +310,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Cartão não encontrado' }, { status: 404 })
       }
 
-      // Preparar transações de cartão (uso positivo; distinguir compra/pagamento pelo sinal)
+  // Preparar transações de cartão (uso positivo; distinguir compra/pagamento pelo sinal)
       const toInsert = transactions.map((tx: any) => {
         const amtNum = Number(tx.amount)
         const isPurchase = amtNum >= 0
@@ -231,179 +354,159 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Receipts mode, target === 'rec'
-    // Salva os recibos E as transações extraídas dos itens como transações normais
+  // Receipts mode, target === 'rec'
+  // Salva o recibo e cria transações em bank_account_transactions (vinculadas por receipt_id)
     if (String(target) === 'rec') {
       let receiptsSaved = 0
       let transactionsSaved = 0
-      let receiptId: string | null = null // Declarar no escopo correto
       
-      // Primeiro, salvar transações como transações normais se houver
-      if (Array.isArray(transactions) && transactions.length > 0) {
-        // Criar uma conta padrão se o usuário não tiver nenhuma
-        let defaultAccountId = null
-        const { data: userAccounts } = await supabase
+      // Primeiro, criar uma conta padrão se o usuário não tiver nenhuma
+      let defaultAccountId = null
+      const { data: userAccounts } = await supabase
+        .from('accounts')
+        .select('id, name')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        
+      if (userAccounts && userAccounts.length > 0) {
+        defaultAccountId = userAccounts[0].id
+        console.log('PDF Confirm - Usando conta existente:', userAccounts[0].name)
+      } else {
+        // Criar conta padrão para recibos
+        const { data: newAccount, error: accountError } = await supabase
           .from('accounts')
-          .select('id, name')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: true })
-          .limit(1)
+          .insert({
+            user_id: user.id,
+            account_name: 'Conta Principal',
+            account_type: 'checking',
+            currency: 'EUR',
+            balance: 0
+          })
+          .select('id')
+          .single()
           
-        if (userAccounts && userAccounts.length > 0) {
-          defaultAccountId = userAccounts[0].id
-          console.log('PDF Confirm - Usando conta existente:', userAccounts[0].name)
-        } else {
-          // Criar conta padrão para recibos
-          const { data: newAccount, error: accountError } = await supabase
-            .from('accounts')
+        if (!accountError && newAccount) {
+          defaultAccountId = newAccount.id
+          console.log('PDF Confirm - Conta criada automaticamente para recibos')
+        }
+      }
+      
+      // Salvar transações de recibos como transações de conta bancária
+      if (Array.isArray(transactions) && transactions.length > 0 && defaultAccountId) {
+        // Primeiro, salvar o recibo se houver dados
+        let receiptHeaderId = null
+        if (Array.isArray(receipts) && receipts.length > 0) {
+          const firstReceipt = receipts[0]
+          const { data: receiptRow, error: recErr } = await supabase
+            .from('receipts')
             .insert({
               user_id: user.id,
-              account_name: 'Conta Principal',
-              account_type: 'checking',
-              currency: 'EUR',
-              balance: 0
+              account_id: defaultAccountId,
+              transaction_id: null, // Will be updated later
+              merchant_name: firstReceipt.merchant || 'Estabelecimento',
+              receipt_date: firstReceipt.date || new Date().toISOString().split('T')[0],
+              subtotal: typeof firstReceipt.subtotal === 'number' ? firstReceipt.subtotal : null,
+              tax: typeof firstReceipt.tax === 'number' ? firstReceipt.tax : null,
+              total: typeof firstReceipt.total === 'number' ? firstReceipt.total : null,
             })
             .select('id')
             .single()
             
-          if (!accountError && newAccount) {
-            defaultAccountId = newAccount.id
-            console.log('PDF Confirm - Conta criada automaticamente para recibos')
+          if (!recErr && receiptRow) {
+            receiptHeaderId = receiptRow.id
+            receiptsSaved = 1
+            console.log('PDF Confirm - Recibo header criado:', receiptHeaderId)
           }
         }
         
-        if (defaultAccountId) {
-          // Sempre criar um recibo para agrupar as transações
-          const mainReceipt = (Array.isArray(receipts) && receipts.length > 0) 
-            ? receipts[0] 
-            : {
-                merchant: 'Estabelecimento',
-                date: new Date().toISOString().split('T')[0],
-                total: transactions.reduce((sum, t) => sum + Math.abs(parseFloat(t.amount)), 0)
-              }
-              
-          try {
-            console.log('PDF Confirm - Salvando recibo principal:', mainReceipt)
-            const { data: receiptRow, error: recErr } = await supabase
-              .from('receipts')
-              .insert({
-                user_id: user.id,
-                account_id: defaultAccountId,
-                merchant_name: mainReceipt.merchant || 'Estabelecimento',
-                receipt_date: mainReceipt.date || new Date().toISOString().split('T')[0],
-                subtotal: typeof mainReceipt.subtotal === 'number' ? mainReceipt.subtotal : null,
-                tax: typeof mainReceipt.tax === 'number' ? mainReceipt.tax : null,
-                total: typeof mainReceipt.total === 'number' ? mainReceipt.total : null,
-              })
-              .select('id')
-              .single()
+        // Buscar categorias para mapear e criar faltantes
+        const { data: categories } = await supabase
+          .from('categories')
+          .select('id, name, type, is_default')
 
-            if (!recErr && receiptRow?.id) {
-              receiptId = receiptRow.id
-              receiptsSaved = 1
-              console.log('PDF Confirm - Recibo principal salvo com ID:', receiptId)
-            } else {
-              console.error('PDF Confirm - Erro ao salvar recibo:', recErr)
-              console.log('PDF Confirm - Dados do recibo tentado:', mainReceipt)
-            }
-          } catch (e) {
-            console.error('PDF Confirm - Erro ao salvar recibo principal:', e)
-          }
-
-          // Buscar categorias para mapear
-          const { data: categories } = await supabase
-            .from('categories')
-            .select('id, name')
-
-          const categoryMap = new Map(categories?.map(cat => [cat.name.toLowerCase(), cat.id]) || [])
+        const categoryMap = new Map(categories?.map(cat => [cat.name.toLowerCase(), { id: cat.id, type: cat.type, is_default: cat.is_default }]) || [])
+        
+        const transactionsToInsert: any[] = []
+        for (const transaction of transactions as any[]) {
+          let categoryId: string | null = null
           
-          const transactionsToInsert = transactions.map((transaction: any) => {
-            let categoryId = null
+          if (transaction.suggestedCategory) {
+            const suggestedLower = String(transaction.suggestedCategory).toLowerCase()
+            categoryId = categoryMap.get(suggestedLower)?.id || null
             
-            if (transaction.suggestedCategory) {
-              const suggestedLower = transaction.suggestedCategory.toLowerCase()
-              categoryId = categoryMap.get(suggestedLower)
-              
-              // Busca parcial se não encontrar exata
+            // Busca parcial se não encontrar exata
+            if (!categoryId) {
+              let parentKey: string | null = null
+              for (const [catName, catInfo] of categoryMap.entries()) {
+                if (catName.includes(suggestedLower) || suggestedLower.includes(catName)) {
+                  categoryId = catInfo.id
+                  break
+                }
+                if (!parentKey && suggestedLower.includes(catName) && /\s-\s/.test(String(transaction.suggestedCategory))) {
+                  parentKey = catName
+                }
+              }
+              // Criar se continuar não encontrada
               if (!categoryId) {
-                for (const [catName, catId] of categoryMap.entries()) {
-                  if (catName.includes(suggestedLower) || suggestedLower.includes(catName)) {
-                    categoryId = catId
-                    break
-                  }
+                const isIncome = Number(transaction.amount) >= 0
+                const newName = String(transaction.suggestedCategory).trim()
+                const newType = isIncome ? 'income' : 'expense'
+                const { data: created, error: catErr } = await supabase
+                  .from('categories')
+                  .insert({
+                    user_id: user.id,
+                    name: newName,
+                    type: newType,
+                    is_default: false,
+                    color: '#6b7280'
+                  })
+                  .select('id')
+                  .single()
+                if (!catErr && created?.id) {
+                  categoryId = created.id
+                  categoryMap.set(newName.toLowerCase(), { id: created.id, type: newType, is_default: false })
+                } else {
+                  console.warn('PDF Confirm - Falha ao criar categoria sugerida (rec mode):', catErr)
                 }
               }
             }
+          }
 
-            const amt = parseFloat(transaction.amount)
-            // Para recibos, valores são negativos (despesas)
-            const finalAmount = -Math.abs(amt)
-            
-            console.log('PDF Confirm - Preparando transação com receiptId:', receiptId)
-            
-            return {
-              user_id: user.id,
-              account_id: defaultAccountId,
-              receipt_id: receiptId, // Link para o recibo
-              amount: finalAmount,
-              description: transaction.description,
-              category_id: categoryId,
-              transaction_date: transaction.date,
-              currency: 'EUR',
-              type: 'expense',
-              created_at: new Date().toISOString(),
-            }
+          const amt = parseFloat(transaction.amount)
+          const isCredit = amt >= 0
+          transactionsToInsert.push({
+            user_id: user.id,
+            account_id: defaultAccountId,
+            transaction_date: transaction.date,
+            merchant_name: transaction.merchant || null,
+            category_id: categoryId,
+            amount: Math.abs(amt),
+            currency: 'EUR',
+            transaction_type: isCredit ? 'credit' : 'debit',
+            description: transaction.description || '',
+            created_at: new Date().toISOString(),
+            receipt_id: receiptHeaderId || null, // Vincular ao recibo se houver
           })
-
-          console.log('PDF Confirm - Transações preparadas para inserir:')
-          console.log('PDF Confirm - Receipt ID que será usado:', receiptId)
-          console.log('PDF Confirm - Primeira transação exemplo:', JSON.stringify(transactionsToInsert[0], null, 2))
-
-          const { data: insertedTransactions, error: insertError } = await supabase
-            .from('transactions')
-            .insert(transactionsToInsert)
-            .select()
-
-          if (!insertError && insertedTransactions) {
-            transactionsSaved = insertedTransactions.length
-            console.log('PDF Confirm - Transações de recibo salvas:', transactionsSaved)
-            console.log('PDF Confirm - Primeira transação salva:', JSON.stringify(insertedTransactions[0], null, 2))
-          } else {
-            console.error('PDF Confirm - Erro ao inserir transações:', insertError)
-          }
         }
-      }
-      
-      // Salvar itens detalhados do recibo se existirem
-      if (receiptId && Array.isArray(receipts) && receipts.length > 0) {
-        const mainReceipt = receipts[0]
-        if (Array.isArray(mainReceipt.items)) {
-          try {
-            const itemsToInsert = mainReceipt.items.map((it: any, index: number) => ({
-              user_id: user.id,
-              receipt_id: receiptId,
-              line_no: index + 1,
-              description: String(it.description || 'Item'),
-              quantity: typeof it.quantity === 'number' ? it.quantity : null,
-              unit_price: typeof it.unitPrice === 'number' ? it.unitPrice : null,
-              tax_rate: typeof it.taxRate === 'number' ? it.taxRate : null,
-              tax_amount: typeof it.taxAmount === 'number' ? it.taxAmount : null,
-              total: typeof it.total === 'number' ? it.total : null,
-              sku: it.code ? String(it.code) : null,
-            }))
-            await supabase.from('receipt_items').insert(itemsToInsert)
-            console.log('PDF Confirm - Itens do recibo salvos:', itemsToInsert.length)
-          } catch (e) {
-            console.error('PDF Confirm - Erro ao salvar itens do recibo:', e)
-          }
+
+        const { data: insertedTransactions, error: insertError } = await supabase
+          .from('bank_account_transactions')
+          .insert(transactionsToInsert)
+          .select()
+
+        if (!insertError && insertedTransactions) {
+          transactionsSaved = insertedTransactions.length
+          console.log('PDF Confirm - Transações de recibo salvas:', transactionsSaved)
+
         }
       }
 
       return NextResponse.json({
         success: true,
-        message: `Recibos: ${receiptsSaved}, Transações: ${transactionsSaved}`,
-        receiptsSaved,
-        transactionsSaved
+        message: `✅ Recibo processado! ${receiptsSaved} recibo(s) salvo(s) na página de recibos. ${transactionsSaved} transação(ões) vinculada(s).`,
+        transactionsSaved,
+        receiptsSaved
       })
     }
 

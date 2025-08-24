@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, RotateCcw, X, Zap } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { useCurrency } from '@/hooks/useCurrency'
 
 interface Transaction {
   date: string
@@ -54,6 +55,7 @@ interface PDFUploaderProps {
 
 export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTarget }: PDFUploaderProps) {
   const { t, language } = useLanguage()
+  const { formatAmount } = useCurrency()
   const [file, setFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
@@ -577,14 +579,6 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
     }
   }
 
-  const formatCurrency = (amount: number) => {
-    const loc = language === 'pt' ? 'pt-PT' : 'en-US'
-    return new Intl.NumberFormat(loc, {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(amount)
-  }
-
   const formatDate = (dateString: string) => {
     const loc = language === 'pt' ? 'pt-PT' : 'en-US'
     return new Date(dateString).toLocaleDateString(loc)
@@ -925,7 +919,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                       + {t('pdfUploader.addTransaction')}
                     </button>
                     <div className="px-3 py-1 bg-gray-100 rounded text-sm font-medium">
-                      Total: {formatCurrency(calculateTotal())}
+                      Total: {formatAmount(calculateTotal())}
                     </div>
                   </div>
                 </div>
@@ -959,7 +953,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                                 transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'
                               }`}
                             >
-                              {formatCurrency(transaction.amount)}
+                              {formatAmount(transaction.amount)}
                             </td>
                             <td className="py-2 px-3">
                               <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded">
@@ -1005,13 +999,13 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                         </div>
                         <div className="text-sm text-gray-700">
                           {typeof r.subtotal === 'number' && (
-                            <span className="mr-4">{t('pdfUploader.subtotal')}: {formatCurrency(r.subtotal)}</span>
+                            <span className="mr-4">{t('pdfUploader.subtotal')}: {formatAmount(r.subtotal)}</span>
                           )}
                           {typeof r.tax === 'number' && (
-                            <span className="mr-4">{t('pdfUploader.tax')}: {formatCurrency(r.tax)}</span>
+                            <span className="mr-4">{t('pdfUploader.tax')}: {formatAmount(r.tax)}</span>
                           )}
                           {typeof r.total === 'number' && (
-                            <span className="font-semibold">{t('pdfUploader.total')}: {formatCurrency(r.total)}</span>
+                            <span className="font-semibold">{t('pdfUploader.total')}: {formatAmount(r.total)}</span>
                           )}
                         </div>
                       </div>
@@ -1056,9 +1050,9 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                                 <td className="py-2 px-3">{it.description}</td>
                                 <td className="py-2 px-3">{it.code || '-'}</td>
                                 <td className="py-2 px-3 text-right">{typeof it.quantity === 'number' ? it.quantity : '-'}</td>
-                                <td className="py-2 px-3 text-right">{typeof it.unitPrice === 'number' ? formatCurrency(it.unitPrice) : '-'}</td>
+                                <td className="py-2 px-3 text-right">{typeof it.unitPrice === 'number' ? formatAmount(it.unitPrice) : '-'}</td>
                                 <td className="py-2 px-3 text-right">{typeof it.taxRate === 'number' ? `${it.taxRate}%` : '-'}</td>
-                                <td className="py-2 px-3 text-right font-medium">{typeof it.total === 'number' ? formatCurrency(it.total) : '-'}</td>
+                                <td className="py-2 px-3 text-right font-medium">{typeof it.total === 'number' ? formatAmount(it.total) : '-'}</td>
                               </tr>
                             ))}
                           </tbody>

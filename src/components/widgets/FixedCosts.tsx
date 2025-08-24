@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useLanguage } from "@/contexts/LanguageContext"
-import { useCurrency } from "@/contexts/CurrencyContext"
+import { useCurrency } from "@/hooks/useCurrency"
 import { Progress } from "@/components/ui/progress"
 import { 
   Zap, 
@@ -61,7 +61,7 @@ interface FixedCostsData {
 
 export function FixedCosts() {
   const { t } = useLanguage()
-  const { displayCurrency } = useCurrency()
+  const { formatWithConversion, displayCurrency } = useCurrency()
   const [data, setData] = useState<FixedCostsData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -130,11 +130,9 @@ export function FixedCosts() {
     ? ((dashboard.totalActual - dashboard.totalEstimated) / dashboard.totalEstimated) * 100 
     : 0
 
+  // Fixed costs are typically in EUR by default, so convert them
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: displayCurrency
-    }).format(amount)
+    return formatWithConversion(amount, 'EUR')
   }
 
   const getVarianceIcon = (variance: number) => {

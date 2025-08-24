@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/hooks/useCurrency';
  
 export function ExpensesByCategory() {
   const { t } = useLanguage();
-  const { displayCurrency } = useCurrency();
+  const { displayCurrency, formatWithConversion } = useCurrency();
   const [data, setData] = useState<Array<{name:string; value:number; color:string}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -44,7 +44,7 @@ const CustomTooltip = ({ active, payload }: any) => {
           <span className="font-medium text-sm">{data.payload.name}</span>
         </div>
         <div className="text-sm text-muted-foreground">
-          {displayCurrency === 'EUR' ? '€' : 'R$'}{data.value.toLocaleString()}
+          {formatWithConversion(data.value, 'EUR')}
         </div>
       </div>
     );

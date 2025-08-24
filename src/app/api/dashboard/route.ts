@@ -80,10 +80,13 @@ async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'
     const rates = await getLatestRates(supabase)
 
     // Accounts (assets)
+    // Use secure view; approximate asset value from balance ranges is not possible directly.
+    // So, fall back to accounts table balances for computation, but do NOT expose raw values in responses.
     const { data: accounts } = await supabase
-      .from('account_balances_view')
+      .from('accounts')
       .select('balance, currency')
       .eq('user_id', userId)
+      .eq('is_active', true)
     const totalAssets = (accounts || []).reduce((sum: number, a: any) => sum + convertAmount(Number(a.balance || 0), (a.currency || 'EUR'), displayCurrency, rates), 0)
 
     // Credit cards (liabilities)
@@ -100,22 +103,36 @@ async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
 
     const { data: historicalData, error: historyError } = await supabase
-      .from('monthly_cash_flow')
-      .select('*')
-      .eq('user_id', userId)
-      .gte('month', sixMonthsAgo.toISOString())
-      .order('month', { ascending: true })
+        .from('bank_account_transactions')
+        .select('transaction_type, amount, currency, transaction_date')
+        .eq('user_id', userId)
+        .gte('transaction_date', sixMonthsAgo.toISOString().split('T')[0])
+        .order('transaction_date', { ascending: true })
 
-    if (historyError) {
-      console.error('Error fetching historical data:', historyError)
-    }
+      if (historyError) {
+        console.error('Error fetching historical data:', historyError)
+      }
 
-    // Calculate cumulative net worth over time (best-effort with conversion)
-    const convertedNets = (historicalData || []).map((m: any) => ({
-      month: m.month,
-      net: convertAmount(Number(m.net || 0), 'EUR', displayCurrency, rates),
-    }))
-    const totalPeriodNet = convertedNets.reduce((s: number, m: any) => s + m.net, 0)
+      // Aggregate monthly net from bank_account_transactions
+      const byMonth: Record<string, { income: number; expenses: number; currency: 'EUR'|'BRL' }> = {}
+      ;(historicalData || []).forEach((t: any) => {
+        const d = new Date(t.transaction_date)
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+        if (!byMonth[key]) byMonth[key] = { income: 0, expenses: 0, currency: (t.currency || 'EUR') }
+        if (t.transaction_type === 'credit') byMonth[key].income += Number(t.amount || 0)
+        else byMonth[key].expenses += Number(t.amount || 0)
+      })
+      const months: string[] = []
+      const cur = new Date(sixMonthsAgo)
+      for (let i=0;i<6;i++) { months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`); cur.setMonth(cur.getMonth()+1) }
+      const convertedNets = months.map((key) => {
+        const m = byMonth[key] || { income: 0, expenses: 0, currency: 'EUR' as const }
+        const net = convertAmount((m.income - m.expenses), m.currency, displayCurrency, rates)
+        const [year, month] = key.split('-').map(Number)
+        const monthDate = new Date(year, month - 1, 1)
+        return { month: monthDate.toISOString(), net }
+      })
+      const totalPeriodNet = convertedNets.reduce((s: number, m: any) => s + m.net, 0)
     const startBalance = netWorth - totalPeriodNet
     let runningBalance = startBalance
     const netWorthHistory = convertedNets.map((m: any) => {
@@ -139,10 +156,11 @@ async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'
 async function getAccountBalances(supabase: any, userId: string) {
   try {
     const { data: accounts, error } = await supabase
-      .from('account_balances_view')
-      .select('*')
+      .from('accounts')
+      .select('id, name, bank_name, account_type, currency, balance, is_active, created_at, updated_at')
       .eq('user_id', userId)
-      .order('balance', { ascending: false })
+      .eq('is_active', true)
+      .order('name', { ascending: true })
 
     if (error) {
       console.error('Error fetching account balances:', error)
@@ -158,35 +176,86 @@ async function getAccountBalances(supabase: any, userId: string) {
 
 async function getExpensesByCategory(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
   try {
-  const rates = await getLatestRates(supabase)
-    // Get current month's expenses
-    const currentMonth = new Date()
-    currentMonth.setDate(1)
-    currentMonth.setHours(0, 0, 0, 0)
+    const rates = await getLatestRates(supabase)
+    // Determine current month range
+    const start = new Date()
+    start.setDate(1)
+    start.setHours(0, 0, 0, 0)
+    const end = new Date(start)
+    end.setMonth(end.getMonth() + 1)
 
-    const { data: expenses, error } = await supabase
-      .from('monthly_expenses_by_category')
-      .select('*')
+    // Get active account ids first
+    const { data: activeAccounts } = await supabase
+      .from('accounts')
+      .select('id')
       .eq('user_id', userId)
-      .gte('month', currentMonth.toISOString())
-      .order('total_amount', { ascending: false })
+      .eq('is_active', true)
+    const activeIds = (activeAccounts || []).map((a: any) => a.id)
+
+    // Fetch this month's debit transactions and group by category in memory
+    const { data: txs, error } = await supabase
+      .from('bank_account_transactions')
+      .select('amount, currency, category_id')
+      .eq('user_id', userId)
+      .in('account_id', activeIds.length ? activeIds : ['00000000-0000-0000-0000-000000000000'])
+      .eq('transaction_type', 'debit')
+      .gte('transaction_date', start.toISOString().split('T')[0])
+      .lt('transaction_date', end.toISOString().split('T')[0])
 
     if (error) {
       console.error('Error fetching expenses by category:', error)
       return NextResponse.json({ error: 'Failed to fetch expenses by category' }, { status: 500 })
     }
 
-    // Format data for chart
-    const formattedData = expenses?.map((expense: any) => {
-      const raw = Number(expense.total_amount)
-      const fromCur: 'EUR'|'BRL' = (expense.currency || 'EUR')
-      const value = convertAmount(raw, fromCur, displayCurrency, rates)
-      return {
-        name: expense.category_name || 'Sem Categoria',
-        value,
-        color: expense.category_color || '#6b7280'
+    const totals = new Map<string | null, { total: number; currency: 'EUR'|'BRL' }>()
+    for (const t of txs || []) {
+      const key = t.category_id || null
+      const cur: 'EUR'|'BRL' = (t.currency || 'EUR')
+      const prev = totals.get(key) || { total: 0, currency: cur }
+      // Sum in native then convert at display time
+      totals.set(key, { total: prev.total + Number(t.amount || 0), currency: cur })
+    }
+
+    // Fetch category metadata including parents
+    const categoryIds = Array.from(new Set(Array.from(totals.keys()).filter((k): k is string => !!k)))
+  const { data: cats } = await supabase
+      .from('categories')
+      .select('id, name, color, parent_id')
+      .in('id', categoryIds.length ? categoryIds : ['00000000-0000-0000-0000-000000000000'])
+  type Cat = { id: string; name: string; color: string; parent_id: string | null }
+  const catMap = new Map<string, Cat>((cats as Cat[] | null || []).map((c) => [c.id, c]))
+
+    // Build parent grouping with children breakdown
+  type Child = { id: string; name: string; value: number }
+  type Group = { id: string | null; name: string; color: string; value: number; children: Child[] }
+  const groups = new Map<string | 'uncategorized', Group>()
+
+    for (const [catId, v] of totals.entries()) {
+      if (!catId) {
+        const key: 'uncategorized' = 'uncategorized'
+        const converted = convertAmount(v.total, v.currency, displayCurrency, rates)
+        const g = groups.get(key) || { id: null, name: 'Sem Categoria', color: '#6b7280', value: 0, children: [] }
+        g.value += converted
+        groups.set(key, g)
+        continue
       }
-    }) || []
+
+  const c = catMap.get(catId) as Cat | undefined
+  const parentId = c?.parent_id || c?.id
+  const parent = parentId ? (catMap.get(parentId) as Cat | undefined) || c : undefined
+  const groupKey: string | 'uncategorized' = parent?.id || 'uncategorized'
+  const groupName = parent?.name || 'Sem Categoria'
+  const groupColor = parent?.color || '#6b7280'
+      const converted = convertAmount(v.total, v.currency, displayCurrency, rates)
+
+  const g: Group = groups.get(groupKey) || { id: parent?.id || null, name: groupName, color: groupColor, value: 0, children: [] }
+      g.value += converted
+      // Child entry (actual category c)
+  g.children.push({ id: catId, name: c?.name || 'Sem Categoria', value: converted })
+      groups.set(groupKey, g)
+    }
+
+    const formattedData = Array.from(groups.values()).sort((a, b) => b.value - a.value)
 
     return NextResponse.json({ data: formattedData })
   } catch (error) {
@@ -197,35 +266,63 @@ async function getExpensesByCategory(supabase: any, userId: string, displayCurre
 
 async function getCashFlow(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL') {
   try {
-  const rates = await getLatestRates(supabase)
-    // Get last 6 months of cash flow
-    const sixMonthsAgo = new Date()
-    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6)
+    const rates = await getLatestRates(supabase)
+    // Range: last 6 full months including current
+    const start = new Date()
+    start.setDate(1)
+    start.setHours(0, 0, 0, 0)
+    start.setMonth(start.getMonth() - 5)
+    const end = new Date(start)
+    end.setMonth(end.getMonth() + 6)
 
-    const { data: cashFlow, error } = await supabase
-      .from('monthly_cash_flow')
-      .select('*')
+    // Active accounts
+    const { data: activeAccounts } = await supabase
+      .from('accounts')
+      .select('id')
       .eq('user_id', userId)
-      .gte('month', sixMonthsAgo.toISOString())
-      .order('month', { ascending: true })
+      .eq('is_active', true)
+    const activeIds = (activeAccounts || []).map((a: any) => a.id)
+
+    // Fetch transactions in range
+    const { data: txs, error } = await supabase
+      .from('bank_account_transactions')
+      .select('amount, currency, transaction_type, transaction_date')
+      .eq('user_id', userId)
+      .in('account_id', activeIds.length ? activeIds : ['00000000-0000-0000-0000-000000000000'])
+      .gte('transaction_date', start.toISOString().split('T')[0])
+      .lt('transaction_date', end.toISOString().split('T')[0])
 
     if (error) {
       console.error('Error fetching cash flow:', error)
       return NextResponse.json({ error: 'Failed to fetch cash flow' }, { status: 500 })
     }
 
-    // Format data for chart
-    const formattedData = cashFlow?.map((m: any) => {
-      const income = convertAmount(Number(m.income), 'EUR', displayCurrency, rates)
-      const expenses = convertAmount(Number(m.expenses), 'EUR', displayCurrency, rates)
-      const net = convertAmount(Number(m.net), 'EUR', displayCurrency, rates)
-      return {
-        month: new Date(m.month).toLocaleDateString('pt-PT', { month: 'short' }),
-        income,
-        expenses,
-        net
-      }
-    }) || []
+    // Aggregate by month
+    const byMonth: Record<string, { income: number; expenses: number; currency: 'EUR'|'BRL' }> = {}
+    for (const t of txs || []) {
+      const d = new Date(t.transaction_date)
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      if (!byMonth[key]) byMonth[key] = { income: 0, expenses: 0, currency: (t.currency || 'EUR') }
+      if (t.transaction_type === 'credit') byMonth[key].income += Number(t.amount || 0)
+      else byMonth[key].expenses += Number(t.amount || 0)
+    }
+
+    // Build ordered months from start to end
+    const months: string[] = []
+    const cur = new Date(start)
+    while (cur < end) {
+      months.push(`${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`)
+      cur.setMonth(cur.getMonth() + 1)
+    }
+
+    const formattedData = months.map((key) => {
+      const m = byMonth[key] || { income: 0, expenses: 0, currency: 'EUR' as const }
+      const [year, month] = key.split('-').map(Number)
+      const label = new Date(year, month - 1, 1).toLocaleDateString('pt-PT', { month: 'short' })
+      const income = convertAmount(m.income, m.currency, displayCurrency, rates)
+      const expenses = convertAmount(m.expenses, m.currency, displayCurrency, rates)
+      return { month: label, income, expenses, net: income - expenses }
+    })
 
     return NextResponse.json({ data: formattedData })
   } catch (error) {
@@ -236,17 +333,37 @@ async function getCashFlow(supabase: any, userId: string, displayCurrency: 'EUR'
 
 async function getRecentTransactions(supabase: any, userId: string, limit: number) {
   try {
-    const { data: transactions, error } = await supabase.rpc('get_recent_transactions', {
-      user_uuid: userId,
-      limit_count: limit
-    })
+    // Active accounts
+    const { data: activeAccounts } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+    const activeIds = (activeAccounts || []).map((a: any) => a.id)
+
+    const { data: txs, error } = await supabase
+      .from('bank_account_transactions')
+      .select('id, amount, currency, description, transaction_date, transaction_type')
+      .eq('user_id', userId)
+      .in('account_id', activeIds.length ? activeIds : ['00000000-0000-0000-0000-000000000000'])
+      .order('transaction_date', { ascending: false })
+      .limit(limit)
 
     if (error) {
       console.error('Error fetching recent transactions:', error)
       return NextResponse.json({ error: 'Failed to fetch recent transactions' }, { status: 500 })
     }
 
-    return NextResponse.json({ transactions: transactions || [] })
+    const mapped = (txs || []).map((t: any) => ({
+      id: t.id,
+      amount: Number(t.amount || 0),
+      currency: t.currency || 'EUR',
+      description: t.description || '',
+      transaction_date: t.transaction_date,
+      type: t.transaction_type === 'credit' ? 'income' : 'expense'
+    }))
+
+    return NextResponse.json({ transactions: mapped })
   } catch (error) {
     console.error('Error in getRecentTransactions:', error)
     return NextResponse.json({ error: 'Failed to get recent transactions' }, { status: 500 })
@@ -266,8 +383,8 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
 
     // Get this month's transactions
     const { data: thisMonthTransactions, error: thisMonthError } = await supabase
-      .from('transactions')
-      .select('type, amount, currency')
+      .from('bank_account_transactions')
+      .select('transaction_type, amount, currency')
       .eq('user_id', userId)
       .gte('transaction_date', currentMonth.toISOString().split('T')[0])
       .lt('transaction_date', nextMonth.toISOString().split('T')[0])
@@ -281,8 +398,8 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     lastMonth.setMonth(lastMonth.getMonth() - 1)
 
     const { data: lastMonthTransactions, error: lastMonthError } = await supabase
-      .from('transactions')
-      .select('type, amount, currency')
+      .from('bank_account_transactions')
+      .select('transaction_type, amount, currency')
       .eq('user_id', userId)
       .gte('transaction_date', lastMonth.toISOString().split('T')[0])
       .lt('transaction_date', currentMonth.toISOString().split('T')[0])
@@ -293,11 +410,11 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
 
     // Calculate KPIs including fixed costs
     const thisMonthIncome = thisMonthTransactions
-      ?.filter((t: any) => t.type === 'income')
+      ?.filter((t: any) => t.transaction_type === 'credit')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     const thisMonthExpenses = thisMonthTransactions
-      ?.filter((t: any) => t.type === 'expense')
+      ?.filter((t: any) => t.transaction_type === 'debit')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     // Get fixed costs for current month
@@ -326,11 +443,11 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     const totalMonthlyExpenses = thisMonthExpenses + totalFixedCosts
 
     const lastMonthIncome = lastMonthTransactions
-      ?.filter((t: any) => t.type === 'income')
+      ?.filter((t: any) => t.transaction_type === 'credit')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     const lastMonthExpenses = lastMonthTransactions
-      ?.filter((t: any) => t.type === 'expense')
+      ?.filter((t: any) => t.transaction_type === 'debit')
       .reduce((sum: number, t: any) => sum + convertAmount(Number(t.amount), (t.currency || 'EUR'), displayCurrency, rates), 0) || 0
 
     // Get last month fixed costs
@@ -363,9 +480,10 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
     // Get total net worth
     // Net worth in selected currency
     const { data: accs } = await supabase
-      .from('account_balances_view')
+      .from('accounts')
       .select('balance, currency')
       .eq('user_id', userId)
+      .eq('is_active', true)
     const assets = (accs || []).reduce((s: number, a: any) => s + convertAmount(Number(a.balance || 0), (a.currency || 'EUR'), displayCurrency, rates), 0)
     const { data: ccs } = await supabase
       .from('credit_cards')
@@ -398,33 +516,80 @@ async function getFinancialKPIs(supabase: any, userId: string, displayCurrency: 
 
 async function getBudgetVsActual(supabase: any, userId: string) {
   try {
-    const { data, error } = await supabase
-      .from('budget_vs_actual')
-      .select('*')
+    // Load active budgets and categories
+    const { data: budgets, error: bErr } = await supabase
+      .from('budgets')
+      .select('id, user_id, category_id, amount, currency, period, start_date, end_date, is_active')
       .eq('user_id', userId)
-      .order('usage_percentage', { ascending: false })
+      .eq('is_active', true)
 
-    if (error) {
-      console.error('Error fetching budget vs actual:', error)
-      return NextResponse.json({ error: 'Failed to fetch budget vs actual' }, { status: 500 })
+    if (bErr) {
+      console.error('Error fetching budgets:', bErr)
+      return NextResponse.json({ error: 'Failed to fetch budgets' }, { status: 500 })
     }
 
-    const formatted = (data || []).map((row: any) => {
-      const budgeted = parseFloat(row.budget_amount || 0)
-      const actual = parseFloat(row.spent_amount || 0)
-      const variance = budgeted > 0 ? ((actual - budgeted) / budgeted) * 100 : 0
+    const categoryIds = Array.from(new Set((budgets || []).map((b: any) => b.category_id).filter(Boolean)))
+    const { data: cats } = await supabase
+      .from('categories')
+      .select('id, name, color')
+      .in('id', categoryIds.length ? categoryIds : ['00000000-0000-0000-0000-000000000000'])
+    const catMap = new Map((cats || []).map((c: any) => [c.id, c]))
+
+    // Define spend window: last 30 days (to mirror previous view)
+    const end = new Date()
+    const start = new Date()
+    start.setDate(start.getDate() - 30)
+
+    // Active accounts
+    const { data: activeAccounts } = await supabase
+      .from('accounts')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('is_active', true)
+    const activeIds = (activeAccounts || []).map((a: any) => a.id)
+
+    // Fetch expenses in window grouped in memory by category
+    const { data: txs } = await supabase
+      .from('bank_account_transactions')
+      .select('amount, currency, category_id')
+      .eq('user_id', userId)
+      .in('account_id', activeIds.length ? activeIds : ['00000000-0000-0000-0000-000000000000'])
+      .eq('transaction_type', 'debit')
+      .gte('transaction_date', start.toISOString().split('T')[0])
+      .lt('transaction_date', end.toISOString().split('T')[0])
+
+    const spentByCategory = new Map<string, { total: number; currency: 'EUR'|'BRL' }>()
+    for (const t of txs || []) {
+      if (!t.category_id) continue
+      const cur: 'EUR'|'BRL' = (t.currency || 'EUR')
+      const prev = spentByCategory.get(t.category_id) || { total: 0, currency: cur }
+      spentByCategory.set(t.category_id, { total: prev.total + Number(t.amount || 0), currency: cur })
+    }
+
+  const formatted = (budgets || []).map((b: any) => {
+      const cat = (b.category_id ? (catMap.get(b.category_id) as any) : null) as any
+      const spent = b.category_id ? spentByCategory.get(b.category_id) : { total: 0, currency: b.currency || 'EUR' }
+      const spentAmount = spent ? Number(spent.total) : 0
+      // Convert spent to budget currency if needed
+      const rates = { eur_to_brl: Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL) || 1, brl_to_eur: 1 / (Number(process.env.EXCHANGE_FALLBACK_EUR_TO_BRL) || 1) }
+      const spentInBudgetCur = convertAmount(spentAmount, (spent?.currency || 'EUR'), (b.currency || 'EUR'), rates as any)
+      const budgeted = Number(b.amount || 0)
+      const variance = budgeted > 0 ? ((spentInBudgetCur - budgeted) / budgeted) * 100 : 0
       return {
-        category: row.category_name || 'Outros',
+    id: b.id,
+    category_id: b.category_id,
+    category: cat?.name || 'Outros',
         budgeted,
-        actual,
+        actual: spentInBudgetCur,
+    usage_percentage: budgeted > 0 ? (spentInBudgetCur / budgeted) * 100 : 0,
         variance,
-        color: row.category_color || '#6b7280',
-        currency: row.currency || 'EUR',
-        period: row.period || 'monthly',
-        start_date: row.start_date,
-        end_date: row.end_date,
+        color: cat?.color || '#6b7280',
+        currency: b.currency || 'EUR',
+        period: b.period || 'monthly',
+        start_date: b.start_date,
+        end_date: b.end_date,
       }
-    })
+    }).sort((a: any, b: any) => (b.variance - a.variance))
 
     return NextResponse.json({ data: formatted })
   } catch (error) {
@@ -448,7 +613,7 @@ async function getFixedCostsData(supabase: any, userId: string) {
       .select(`
         id,
         name,
-        type,
+        cost_type,
         estimated_amount,
         currency,
         provider,
@@ -523,17 +688,17 @@ async function getFixedCostsData(supabase: any, userId: string) {
       }
 
       // Group by type
-      if (!dashboard.byType[cost.type]) {
-        dashboard.byType[cost.type] = { estimated: 0, actual: 0, count: 0 }
+      if (!dashboard.byType[cost.cost_type]) {
+        dashboard.byType[cost.cost_type] = { estimated: 0, actual: 0, count: 0 }
       }
-      dashboard.byType[cost.type].estimated += estimated
-      dashboard.byType[cost.type].actual += actual
-      dashboard.byType[cost.type].count++
+      dashboard.byType[cost.cost_type].estimated += estimated
+      dashboard.byType[cost.cost_type].actual += actual
+      dashboard.byType[cost.cost_type].count++
 
       return {
         id: cost.id,
         name: cost.name,
-        type: cost.type,
+        type: cost.cost_type,
         estimated: estimated,
         actual: actual,
         currency: cost.currency,

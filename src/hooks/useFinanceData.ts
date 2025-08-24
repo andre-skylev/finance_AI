@@ -5,9 +5,12 @@ interface Account {
   name: string
   bank_name?: string
   account_type: 'checking' | 'savings' | 'credit' | 'investment'
-  balance: number
+  balance_range?: string  // SECURE: Balance shown as range for API security context
+  balance: number         // ACTUAL: Real balance for authenticated user display
   currency: string
   is_active: boolean
+  account_masked?: string // SECURE: Masked account number
+  account_number_hash?: string // SECURE: Hashed account identifier
   last_update?: string
 }
 
@@ -62,7 +65,7 @@ export function useAccounts() {
     }
   }
 
-  const createAccount = async (accountData: Omit<Account, 'id' | 'is_active'>) => {
+  const createAccount = async (accountData: Omit<Account, 'id' | 'is_active' | 'balance_range' | 'account_masked'>) => {
     try {
       const response = await fetch('/api/accounts', {
         method: 'POST',

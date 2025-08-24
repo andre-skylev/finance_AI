@@ -13,6 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
 import PDFUploader from '@/components/PDFUploader'
+import { useCurrency } from '@/hooks/useCurrency'
 
 type Movement = {
   id: string
@@ -20,7 +21,7 @@ type Movement = {
   currency: string
   description: string | null
   transaction_date: string
-  type: 'income' | 'expense' | 'transfer'
+  type: 'income' | 'expense'
   category_id?: string | null
 }
 
@@ -32,12 +33,14 @@ type Account = {
   currency: string
 }
 
-export default function AccountMovementsPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
-  const { language, t: T } = useLanguage()
+export default function AccountPage({ params }: { params: Promise<{ id: string }> }) {
+  const { language, t: translate } = useLanguage()
   const { user } = useAuth()
+  const { formatBalance } = useCurrency()
   const router = useRouter()
   const supabase = createClient()
+  const resolvedParams = use(params)
+  const { id } = resolvedParams
 
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -64,24 +67,26 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
   })
 
   const t = useMemo(() => ({
-    title: T('accountsPage.title'),
-    back: T('accountsPage.back'),
-    importPdf: T('accountsPage.importPdf'),
-    addMovement: T('accountsPage.addMovement'),
-    balance: T('accountsPage.balance'),
-    none: T('accountsPage.none'),
-    date: T('accountsPage.date'),
-    desc: T('accountsPage.description'),
-    amount: T('accountsPage.amount'),
-    type: T('accountsPage.type'),
-    expense: T('accountsPage.expense'),
-    income: T('accountsPage.income'),
-    save: T('accountsPage.save'),
-    category: T('accountsPage.category'),
-    selectCategory: T('accountsPage.selectCategory'),
-    loading: T('accountsPage.loading'),
-    error: T('accountsPage.error')
-  }), [T])
+    title: translate('accountsPage.title'),
+    back: translate('accountsPage.back'),
+    importPdf: translate('accountsPage.importPdf'),
+    importFile: translate('accountsPage.importFile'),
+    importFileDesc: translate('accountsPage.importFileDesc'),
+    addMovement: translate('accountsPage.addMovement'),
+    balance: translate('accountsPage.balance'),
+    none: translate('accountsPage.none'),
+    date: translate('accountsPage.date'),
+    desc: translate('accountsPage.description'),
+    amount: translate('accountsPage.amount'),
+    type: translate('accountsPage.type'),
+    expense: translate('accountsPage.expense'),
+    income: translate('accountsPage.income'),
+    save: translate('accountsPage.save'),
+    category: translate('accountsPage.category'),
+    selectCategory: translate('accountsPage.selectCategory'),
+    loading: translate('accountsPage.loading'),
+    error: translate('accountsPage.error')
+  }), [translate])
 
   useEffect(() => {
     if (!user) return
@@ -101,13 +106,22 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
         setAccount(acc as any)
 
         const { data: txs, error: txErr } = await supabase
-          .from('transactions')
-          .select('id, amount, currency, description, transaction_date, type, category_id')
+          .from('bank_account_transactions')
+          .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
           .eq('user_id', user.id)
-    .eq('account_id', id)
+          .eq('account_id', id)
           .order('transaction_date', { ascending: false })
         if (txErr) throw txErr
-        setMovements((txs || []) as any)
+        const mapped: Movement[] = (txs || []).map((t: any) => ({
+          id: t.id,
+          amount: Number(t.amount),
+          currency: t.currency,
+          description: t.description,
+          transaction_date: t.transaction_date,
+          type: t.transaction_type === 'credit' ? 'income' : 'expense',
+          category_id: t.category_id ?? null,
+        }))
+        setMovements(mapped)
       } catch (e: any) {
         setError(e?.message || t.error)
       } finally {
@@ -116,30 +130,22 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
     })()
   }, [user, id, supabase, t.error])
 
-  const formatCurrency = (amount: number, currency: string) => {
-    try {
-      return new Intl.NumberFormat(language === 'pt' ? 'pt-PT' : 'en-US', { style: 'currency', currency }).format(amount)
-    } catch {
-      return `${currency} ${amount.toFixed(2)}`
-    }
-  }
-
   const handleSave = async () => {
     if (!user || !account) return
     const amt = parseFloat(form.amount)
     if (!amt || isNaN(amt)) return
     try {
       setSaving(true)
-      const signed = form.type === 'expense' ? -Math.abs(amt) : Math.abs(amt)
-      const { error: insErr } = await supabase.from('transactions').insert([
+      const isIncome = form.type === 'income'
+    const { error: insErr } = await supabase.from('bank_account_transactions').insert([
         {
           user_id: user.id,
           account_id: account.id,
-          amount: signed,
+          amount: Math.abs(amt),
           currency: account.currency || 'EUR',
-          description: form.description || null,
+      description: (form.description || '').trim() || (language === 'pt' ? (isIncome ? 'Entrada manual' : 'Saída manual') : (isIncome ? 'Manual income' : 'Manual expense')),
           transaction_date: form.date,
-          type: form.type,
+          transaction_type: isIncome ? 'credit' : 'debit',
           category_id: form.category_id || null
         }
       ])
@@ -154,12 +160,21 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
       if (accUpd) setAccount(accUpd as any)
       // Refresh list
       const { data: txs } = await supabase
-        .from('transactions')
-  .select('id, amount, currency, description, transaction_date, type, category_id')
+        .from('bank_account_transactions')
+        .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
         .eq('user_id', user.id)
         .eq('account_id', account.id)
         .order('transaction_date', { ascending: false })
-      setMovements((txs || []) as any)
+      const mapped: Movement[] = (txs || []).map((t: any) => ({
+        id: t.id,
+        amount: Number(t.amount),
+        currency: t.currency,
+        description: t.description,
+        transaction_date: t.transaction_date,
+        type: t.transaction_type === 'credit' ? 'income' : 'expense',
+        category_id: t.category_id ?? null,
+      }))
+      setMovements(mapped)
       setForm({ type: 'expense', amount: '', date: new Date().toISOString().split('T')[0], description: '', category_id: '' })
     } catch (e) {
       console.error(e)
@@ -194,21 +209,38 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
           </button>
           {account && (
             <div className="text-xl font-semibold">
-              {hideBalance ? '••••••' : formatCurrency(account.balance, account.currency)}
+              {hideBalance ? '••••••' : formatBalance(account.balance, account.currency as 'EUR' | 'BRL' | 'USD')}
             </div>
           )}
-          {account && (
-            <div className="ml-auto">
-              <PDFUploader onSuccess={() => {
+        </div>
+
+        {/* PDF Uploader - Moved to separate section */}
+        {account && (
+          <div className="bg-white rounded-lg border p-4">
+            <div className="mb-3">
+              <h3 className="text-sm font-medium text-gray-700">{t.importFile}</h3>
+              <p className="text-xs text-gray-500">{t.importFileDesc}</p>
+            </div>
+            <PDFUploader 
+              onSuccess={() => {
                 // refresh movements after successful import
                 (async () => {
                   const { data: txs } = await supabase
-                    .from('transactions')
-                    .select('id, amount, currency, description, transaction_date, type, category_id')
+                    .from('bank_account_transactions')
+                    .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
                     .eq('user_id', user!.id)
                     .eq('account_id', account.id)
                     .order('transaction_date', { ascending: false })
-                  setMovements((txs || []) as any)
+                  const mapped: Movement[] = (txs || []).map((t: any) => ({
+                    id: t.id,
+                    amount: Number(t.amount),
+                    currency: t.currency,
+                    description: t.description,
+                    transaction_date: t.transaction_date,
+                    type: t.transaction_type === 'credit' ? 'income' : 'expense',
+                    category_id: t.category_id ?? null,
+                  }))
+                  setMovements(mapped)
                   // Optionally refresh account balance here
                   const { data: acc } = await supabase
                     .from('accounts')
@@ -218,10 +250,11 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                     .single()
                   if (acc) setAccount(acc as any)
                 })()
-              }} forcedTarget={`acc:${account.id}`} />
-            </div>
-          )}
-        </div>
+              }} 
+              forcedTarget={`acc:${account.id}`} 
+            />
+          </div>
+        )}
 
         {/* Quick add movement */}
         <div className="bg-white rounded-lg border p-4">
@@ -310,7 +343,7 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                       const signed = m.type === 'expense' ? -Math.abs(Number(m.amount)) : Math.abs(Number(m.amount))
                       return (
                         <td className={`py-2 px-3 text-right font-medium ${signed >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                          {formatCurrency(signed, account?.currency || m.currency)}
+                          {formatBalance(signed, (account?.currency || m.currency) as 'EUR' | 'BRL' | 'USD')}
                         </td>
                       )
                     })()}
@@ -320,7 +353,7 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                     <td className="py-2 px-3">{m.type === 'income' ? t.income : m.type === 'expense' ? t.expense : 'Transfer'}</td>
                     <td className="py-2 px-3 text-right">
                       <div className="flex items-center justify-end gap-2">
-                        {m.type !== 'transfer' && (
+                        {
                           <button
                             onClick={() => {
                               setEditing(m)
@@ -336,7 +369,7 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                           >
                             <Pencil className="h-4 w-4" />
                           </button>
-                        )}
+                        }
                         <button
                           onClick={async () => {
                             if (!user) return
@@ -344,7 +377,7 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                             if (!window.confirm(confirmMsg)) return
                             try {
                               const { error: delErr } = await supabase
-                                .from('transactions')
+                                .from('bank_account_transactions')
                                 .delete()
                                 .eq('id', m.id)
                                 .eq('user_id', user.id)
@@ -360,12 +393,21 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                                 if (accUpd) setAccount(accUpd as any)
                               }
                               const { data: txs } = await supabase
-                                .from('transactions')
-                                .select('id, amount, currency, description, transaction_date, type, category_id')
+                                .from('bank_account_transactions')
+                                .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
                                 .eq('user_id', user.id)
                                 .eq('account_id', account?.id || '')
                                 .order('transaction_date', { ascending: false })
-                              setMovements((txs || []) as any)
+                              const mapped: Movement[] = (txs || []).map((t: any) => ({
+                                id: t.id,
+                                amount: Number(t.amount),
+                                currency: t.currency,
+                                description: t.description,
+                                transaction_date: t.transaction_date,
+                                type: t.transaction_type === 'credit' ? 'income' : 'expense',
+                                category_id: t.category_id ?? null,
+                              }))
+                              setMovements(mapped)
                             } catch (e) {
                               console.error(e)
                             }
@@ -457,13 +499,13 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
                     const newSigned = editForm.type === 'expense' ? -Math.abs(newAmtAbs) : Math.abs(newAmtAbs)
                     try {
                       // Update transaction
-                      const { error: updTxErr } = await supabase
-                        .from('transactions')
+            const { error: updTxErr } = await supabase
+                        .from('bank_account_transactions')
                         .update({
-                          type: editForm.type,
-                          description: editForm.description || null,
+                          transaction_type: editForm.type === 'income' ? 'credit' : 'debit',
+              description: (editForm.description || '').trim() || (language === 'pt' ? (editForm.type === 'income' ? 'Entrada manual' : 'Saída manual') : (editForm.type === 'income' ? 'Manual income' : 'Manual expense')),
                           transaction_date: editForm.date,
-                          amount: newSigned,
+                          amount: Math.abs(newAmtAbs),
                           category_id: editForm.category_id || null
                         })
                         .eq('id', editing.id)
@@ -481,12 +523,21 @@ export default function AccountMovementsPage({ params }: { params: Promise<{ id:
 
                       // Refresh list
                       const { data: txs } = await supabase
-                        .from('transactions')
-                        .select('id, amount, currency, description, transaction_date, type, category_id')
+                        .from('bank_account_transactions')
+                        .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
                         .eq('user_id', user.id)
                         .eq('account_id', account.id)
                         .order('transaction_date', { ascending: false })
-                      setMovements((txs || []) as any)
+                      const mapped: Movement[] = (txs || []).map((t: any) => ({
+                        id: t.id,
+                        amount: Number(t.amount),
+                        currency: t.currency,
+                        description: t.description,
+                        transaction_date: t.transaction_date,
+                        type: t.transaction_type === 'credit' ? 'income' : 'expense',
+                        category_id: t.category_id ?? null,
+                      }))
+                      setMovements(mapped)
                       setEditing(null)
                     } catch (e) {
                       console.error(e)

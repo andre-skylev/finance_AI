@@ -4,12 +4,12 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/hooks/useCurrency';
 import { BarChart3 } from 'lucide-react';
 
 export function BudgetVsActual() {
   const { t } = useLanguage();
-  const { displayCurrency } = useCurrency();
+  const { displayCurrency, formatWithConversion } = useCurrency();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -100,7 +100,7 @@ export function BudgetVsActual() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => `${displayCurrency === 'EUR' ? '€' : 'R$'}${value}`}
+              tickFormatter={(value) => formatWithConversion(value, 'EUR').replace(/[€R\$\s]/g, '')}
             />
             <Tooltip
               contentStyle={{
@@ -114,7 +114,7 @@ export function BudgetVsActual() {
                   actual: t('dashboard.actual')
                 };
                 const s = displayCurrency === 'EUR' ? '€' : 'R$'
-                return [`${s}${value.toLocaleString()}`, labels[name] || name];
+                return [formatWithConversion(value, 'EUR'), labels[name] || name];
               }}
             />
             <Bar 
@@ -150,7 +150,7 @@ export function BudgetVsActual() {
                     {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    ({displayCurrency === 'EUR' ? '€' : 'R$'}{Math.abs(item.actual - item.budgeted)})
+                    ({formatWithConversion(Math.abs(item.actual - item.budgeted), 'EUR')})
                   </span>
                 </div>
               </div>

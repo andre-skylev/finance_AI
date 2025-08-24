@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/hooks/useCurrency';
 
 export function CashFlow() {
   const { t } = useLanguage();
-  const { displayCurrency } = useCurrency();
+  const { displayCurrency, formatWithConversion } = useCurrency();
   const [data, setData] = useState<Array<{month:string; income:number; expenses:number; net:number}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -60,7 +60,7 @@ export function CashFlow() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => `${displayCurrency === 'EUR' ? '€' : 'R$'}${value}`}
+              tickFormatter={(value) => formatWithConversion(value, 'EUR').replace(/[€R\$\s]/g, '')}  // Clean format for axis
             />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
@@ -76,7 +76,7 @@ export function CashFlow() {
                   net: t('dashboard.netBalance')
                 };
                 const symbol = displayCurrency === 'EUR' ? '€' : 'R$'
-                return [`${symbol}${value.toLocaleString()}`, labels[name] || name];
+                return [formatWithConversion(value, 'EUR'), labels[name] || name];
               }}
             />
             <Bar dataKey="income" fill="url(#incomeGradient)" radius={[4, 4, 0, 0]} />

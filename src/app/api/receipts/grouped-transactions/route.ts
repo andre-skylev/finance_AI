@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
 
     // Buscar transações agrupadas por recibo
     const { data: groupedTransactions, error } = await supabase
-      .from('transactions')
+  .from('bank_account_transactions')
       .select(`
         id,
         amount,

@@ -12,13 +12,34 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    // Get user's accounts
-    const { data: accounts, error } = await supabase
-      .from('accounts')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
+    // Get user's accounts directly (showing actual balances)
+    let accounts, error;
+    try {
+      const result = await supabase
+        .from('accounts')
+        .select(`
+          id,
+          user_id,
+          name,
+          bank_name,
+          account_type,
+          currency,
+          balance,
+          account_masked,
+          account_number_hash,
+          is_active,
+          created_at,
+          updated_at
+        `)
+        .eq('user_id', user.id)
+        .order('name', { ascending: true })
+
+      accounts = result.data || []
+      error = result.error
+    } catch (dbError) {
+      console.error('Database error:', dbError)
+      error = dbError
+    }
 
     if (error) {
       console.error('Error fetching accounts:', error)
@@ -44,7 +65,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, bank_name, account_type, currency, balance = 0 } = body
+  const { name, bank_name, account_type, currency, balance = 0, account_number } = body
 
     // Validate required fields
     if (!name || !account_type || !currency) {
@@ -54,9 +75,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-  // Create new account (store raw balance only if zero to avoid double counting with trigger)
+  // Create new account with masking fields
   const initial = parseFloat(balance)
   const initialProvided = !isNaN(initial) && initial !== 0
+  // simple masking helpers
+  const masked = account_number ? `•••• ${String(account_number).slice(-4)}` : null
+  const account_number_hash = account_number ? await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(account_number))).then(arr => Buffer.from(new Uint8Array(arr)).toString('hex')) : null
   const { data: account, error } = await supabase
       .from('accounts')
       .insert({
@@ -65,7 +89,10 @@ export async function POST(request: NextRequest) {
         bank_name,
         account_type,
         currency,
-    balance: initialProvided ? 0 : parseFloat(balance)
+        balance: initialProvided ? 0 : parseFloat(balance),
+        account_masked: masked,
+        account_number_hash,
+        sensitive_data_encrypted: !!account_number
       })
       .select()
       .single()
@@ -78,21 +105,20 @@ export async function POST(request: NextRequest) {
     // If an initial balance was provided, record it as a transaction so it appears in the ledger
     try {
       if (initialProvided && account?.id) {
-        const isIncome = initial > 0
-        const signedAmount = isIncome ? Math.abs(initial) : -Math.abs(initial)
+        const isCredit = initial > 0
         const today = new Date().toISOString().slice(0, 10)
         const { error: txErr } = await supabase
-          .from('transactions')
+          .from('bank_account_transactions')
           .insert([
             {
               user_id: user.id,
               account_id: account.id,
-              amount: signedAmount,
-              currency: currency,
-              description: 'Initial Balance', // keep simple and language-agnostic on server
               transaction_date: today,
-              type: isIncome ? 'income' : 'expense',
-              category_id: null,
+              merchant_name: 'Initial Balance',
+              description: 'Initial Balance',
+              amount: Math.abs(initial),
+              currency: currency,
+              transaction_type: isCredit ? 'credit' : 'debit',
             },
           ])
         if (txErr) {
@@ -102,10 +128,21 @@ export async function POST(request: NextRequest) {
     } catch (e) {
       console.warn('Non-blocking error while creating initial balance transaction:', e)
     }
-    // Return latest account with accurate balance
+    // Return latest account with SECURE data only - NO BALANCE EXPOSURE
     const { data: fresh } = await supabase
       .from('accounts')
-      .select('*')
+      .select(`
+        id,
+        name,
+        bank_name,
+        account_type,
+        currency,
+        account_masked,
+        is_active,
+        created_at,
+        updated_at,
+        sensitive_data_encrypted
+      `)
       .eq('id', account.id)
       .single()
     return NextResponse.json({ account: fresh || account }, { status: 201 })
@@ -133,7 +170,7 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Account ID is required' }, { status: 400 })
     }
 
-    // Update account
+    // Update account - SECURE: Don't expose balance in response
     const { data: account, error } = await supabase
       .from('accounts')
       .update({
@@ -146,7 +183,18 @@ export async function PUT(request: NextRequest) {
       })
       .eq('id', id)
       .eq('user_id', user.id)
-      .select()
+      .select(`
+        id,
+        name,
+        bank_name,
+        account_type,
+        currency,
+        account_masked,
+        is_active,
+        created_at,
+        updated_at,
+        sensitive_data_encrypted
+      `)
       .single()
 
     if (error) {
@@ -196,9 +244,9 @@ export async function DELETE(request: NextRequest) {
       // Exclusão completa - excluir todas as transações relacionadas primeiro
       console.log(`Excluindo transações da conta ${account.name} (${id})`)
       
-      // Excluir transações da conta
+      // Excluir transações bancárias da conta
       const { error: transactionsError } = await supabase
-        .from('transactions')
+        .from('bank_account_transactions')
         .delete()
         .eq('account_id', id)
         .eq('user_id', user.id)
@@ -208,7 +256,7 @@ export async function DELETE(request: NextRequest) {
         return NextResponse.json({ error: 'Failed to delete account transactions' }, { status: 500 })
       }
 
-      // Excluir recibos relacionados à conta
+  // Excluir recibos relacionados à conta
       const { error: receiptsError } = await supabase
         .from('receipts')
         .delete()
@@ -239,13 +287,24 @@ export async function DELETE(request: NextRequest) {
         message: 'Account and all related data deleted successfully' 
       })
     } else {
-      // Soft delete by setting is_active to false
+      // Soft delete by setting is_active to false - SECURE: Don't expose balance
       const { data: account, error } = await supabase
         .from('accounts')
         .update({ is_active: false })
         .eq('id', id)
         .eq('user_id', user.id)
-        .select()
+        .select(`
+          id,
+          name,
+          bank_name,
+          account_type,
+          currency,
+          account_masked,
+          is_active,
+          created_at,
+          updated_at,
+          sensitive_data_encrypted
+        `)
         .single()
 
       if (error) {

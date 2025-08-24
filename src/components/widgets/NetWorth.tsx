@@ -4,11 +4,11 @@ import { useEffect, useState } from 'react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
-import { useCurrency } from '@/contexts/CurrencyContext';
+import { useCurrency } from '@/hooks/useCurrency';
 
 export function NetWorth() {
   const { t } = useLanguage();
-  const { displayCurrency } = useCurrency();
+  const { displayCurrency, formatWithConversion } = useCurrency();
   const [data, setData] = useState<Array<{name:string; value:number}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -49,14 +49,14 @@ export function NetWorth() {
               </linearGradient>
             </defs>
             <XAxis dataKey="name" stroke="hsl(var(--foreground))" />
-            <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => (displayCurrency === 'EUR' ? '€' : 'R$') + v} />
+            <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => formatWithConversion(v, 'EUR').replace(/[€R\$\s]/g, '')} />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--background))",
                 borderColor: "hsl(var(--border))",
               }}
-              formatter={(value: number) => [(displayCurrency === 'EUR' ? '€' : 'R$') + Number(value).toLocaleString(), t('dashboard.netWorth')]}
+              formatter={(value: number) => [formatWithConversion(Number(value), 'EUR'), t('dashboard.netWorth')]}
             />
             <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
           </AreaChart>

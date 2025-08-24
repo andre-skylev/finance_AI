@@ -14,14 +14,16 @@ import { Button } from "@/components/ui/button";
 import CurrencyDropdown from "@/components/CurrencyDropdown";
 import { FileUp, Loader2 } from "lucide-react";
 import Link from "next/link";
-import { useCurrency } from "@/contexts/CurrencyContext";
+import { useCurrency } from "@/hooks/useCurrency";
+import { useCurrency as useCurrencyContext } from "@/contexts/CurrencyContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useMemo, useState, useEffect } from "react";
 
 export default function DashboardPage() {
   const [switching, setSwitching] = useState(false)
+  const { displayCurrency, rates } = useCurrencyContext() // Para o dropdown e info de câmbio
+  
   const RateInfo = () => {
-    const { displayCurrency, rates } = useCurrency()
     const { language } = useLanguage()
     const text = useMemo(() => {
       if (!rates) return null

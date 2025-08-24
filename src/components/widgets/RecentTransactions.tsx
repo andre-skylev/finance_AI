@@ -5,9 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useLanguage } from '../../contexts/LanguageContext';
+import { useCurrency } from '@/hooks/useCurrency';
 
 export function RecentTransactions() {
   const { t } = useLanguage();
+  const { formatAmountWithConversion } = useCurrency();
   const [transactions, setTransactions] = useState<Array<{id:string; description:string; amount:number; currency:string; type:'income'|'expense'}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -53,7 +55,7 @@ export function RecentTransactions() {
                   <p className="font-medium">{transaction.description}</p>
                 </div>
                 <p className={`font-semibold ${transaction.type === 'income' ? 'text-green-600' : ''}`}>
-                  {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: transaction.currency || 'EUR' }).format(Math.abs(transaction.amount))}
+                  {formatAmountWithConversion(Math.abs(transaction.amount), (transaction.currency as 'EUR'|'BRL'|'USD') || 'EUR')}
                 </p>
               </div>
             ))}

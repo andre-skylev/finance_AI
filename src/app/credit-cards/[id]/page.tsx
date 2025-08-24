@@ -209,27 +209,31 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 							</div>
 						)}
 					</div>
-					{card && (
-						<div className="ml-auto">
-							<PDFUploader onSuccess={async () => {
-								const { data: txs } = await supabase
-									.from('credit_card_transactions')
-									.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
-									.eq('user_id', user!.id)
-									.eq('credit_card_id', card.id)
-									.order('transaction_date', { ascending: false })
-								setMovements((txs || []) as any)
-								const { data: c } = await supabase
-												.from('credit_cards')
-												.select('id, card_name, bank_name, currency, credit_limit, current_balance')
-												.eq('id', card.id)
-												.eq('user_id', user!.id)
-												.single()
-											if (c) setCard(c as any)
-										}} forcedTarget={`cc:${card.id}`} />
-									</div>
-								)}
 				</div>
+
+				{/* Import Transactions */}
+				{card && (
+					<div className="bg-white rounded-lg border p-4">
+						<h3 className="text-lg font-medium mb-2">{t.importPdf}</h3>
+						<p className="text-sm text-gray-600 mb-4">Upload a PDF statement or take a photo to automatically extract transactions</p>
+						<PDFUploader onSuccess={async () => {
+							const { data: txs } = await supabase
+								.from('credit_card_transactions')
+								.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
+								.eq('user_id', user!.id)
+								.eq('credit_card_id', card.id)
+								.order('transaction_date', { ascending: false })
+							setMovements((txs || []) as any)
+							const { data: c } = await supabase
+											.from('credit_cards')
+											.select('id, card_name, bank_name, currency, credit_limit, current_balance')
+											.eq('id', card.id)
+											.eq('user_id', user!.id)
+											.single()
+										if (c) setCard(c as any)
+									}} forcedTarget={`cc:${card.id}`} />
+					</div>
+				)}
 
 				{/* Quick add movement */}
 				<div className="bg-white rounded-lg border p-4">

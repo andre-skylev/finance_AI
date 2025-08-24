@@ -5,9 +5,10 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 import { useLanguage } from '@/contexts/LanguageContext'
-import { Plus, Calendar, Euro, Edit, Trash2, RotateCcw } from 'lucide-react'
+import { Plus, Calendar, Euro, Edit, Trash2, RotateCcw, Banknote } from 'lucide-react'
 import CurrencyDropdown from '@/components/CurrencyDropdown'
 import { useCurrency } from '@/contexts/CurrencyContext'
+import { useAccounts } from '@/hooks/useFinanceData'
 
 type FixedIncome = {
   id: string
@@ -20,6 +21,7 @@ type FixedIncome = {
   pay_day?: number | null
   is_active: boolean
   next_pay_date: string | null
+  account_id?: string | null
 }
 
 export default function FixedIncomesPage() {
@@ -27,6 +29,7 @@ export default function FixedIncomesPage() {
   const { user } = useAuth()
   const { t } = useLanguage()
   const { displayCurrency, convert } = useCurrency()
+  const { accounts } = useAccounts()
   const [items, setItems] = useState<FixedIncome[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -37,16 +40,22 @@ export default function FixedIncomesPage() {
     billing_period: 'monthly' as 'weekly'|'monthly'|'yearly',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
-    pay_day: '' as unknown as number | ''
+    pay_day: '' as unknown as number | '',
+    account_id: '' as string
   })
 
   useEffect(() => { if (user) load() }, [user])
+  // When accounts load, preselect first active account
+  useEffect(() => {
+    const first = accounts.find(a => a.is_active)
+    setForm(prev => ({ ...prev, account_id: prev.account_id || first?.id || '' }))
+  }, [accounts])
 
   const load = async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('fixed_incomes')
-      .select('id,name,amount,currency,billing_period,start_date,end_date,is_active,next_pay_date,pay_day')
+      .select('id,name,amount,currency,billing_period,start_date,end_date,is_active,next_pay_date,pay_day,account_id')
       .eq('user_id', user?.id)
       .order('name')
     if (!error) setItems((data || []) as any)
@@ -65,6 +74,7 @@ export default function FixedIncomesPage() {
       if (form.pay_day) nextDate.setDate(Math.min(Number(form.pay_day), 28))
     } else if (form.billing_period === 'yearly') nextDate.setFullYear(nextDate.getFullYear() + 1)
 
+    if (!form.account_id) return alert(t('messages.selectAccount'))
     const { error } = await supabase.from('fixed_incomes').insert([{
       user_id: user?.id,
       name: form.name,
@@ -75,10 +85,11 @@ export default function FixedIncomesPage() {
       end_date: form.end_date || null,
       pay_day: form.pay_day ? Number(form.pay_day) : null,
       next_pay_date: nextDate.toISOString().split('T')[0],
-      is_active: true
+      is_active: true,
+      account_id: form.account_id
     }])
     if (error) return alert(t('messages.errorCreating') + (error as any).message)
-    setForm({ name:'', amount:'', currency:'EUR', billing_period:'monthly', start_date:new Date().toISOString().split('T')[0], end_date:'', pay_day: '' as any })
+  setForm({ name:'', amount:'', currency:'EUR', billing_period:'monthly', start_date:new Date().toISOString().split('T')[0], end_date:'', pay_day: '' as any, account_id: '' })
     setShowForm(false)
     load()
   }
@@ -174,6 +185,15 @@ export default function FixedIncomesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-2">{t('fixedIncomes.payDay')} ({t('common.optional')})</label>
                   <input type="number" min={1} max={31} value={form.pay_day as any || ''} onChange={(e)=>setForm(p=>({...p,pay_day: e.target.value ? Number(e.target.value) : '' as any}))} className="w-full px-3 py-2 border rounded-lg" placeholder={t('fixedIncomes.placeholders.payDay')} />
                 </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('fixedIncomes.account')}</label>
+                  <select value={form.account_id} onChange={(e)=>setForm(p=>({...p, account_id: e.target.value}))} className="w-full px-3 py-2 border rounded-lg" required>
+                    <option value="">{t('fixedIncomes.selectAccount')}</option>
+                    {accounts.filter(a=>a.is_active).map(a => (
+                      <option key={a.id} value={a.id}>{a.name} {a.bank_name ? `(${a.bank_name})` : ''}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-3">
@@ -200,6 +220,9 @@ export default function FixedIncomesPage() {
                       <div className="flex items-center gap-4 mt-2 text-sm text-gray-500">
                         <div className="flex items-center"><Calendar className="h-4 w-4 mr-1" />{getPeriodLabel(i.billing_period)}</div>
                         {i.next_pay_date && (<span>{t('fixedIncomes.nextPay')}: {new Date(i.next_pay_date).toLocaleDateString('pt-PT')}</span>)}
+                        {i.account_id && (
+                          <span className="flex items-center"><Banknote className="h-4 w-4 mr-1" />{accounts.find(a=>a.id===i.account_id)?.name || t('fixedIncomes.unknownAccount')}</span>
+                        )}
                       </div>
                     </div>
                     <div className="flex items-center gap-4">

@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
 
     // Fetch user's financial data to build the context
     const [transactionsRes, goalsRes, accountsRes] = await Promise.all([
-      supabase.from('transactions').select('description, amount, currency, type, transaction_date').eq('user_id', user.id).limit(50),
+  supabase.from('bank_account_transactions').select('description, amount, currency, transaction_type, transaction_date').eq('user_id', user.id).limit(50),
       supabase.from('goals').select('name, target_amount, current_amount, currency').eq('user_id', user.id),
       supabase.from('accounts').select('name, bank_name, balance, currency').eq('user_id', user.id),
     ])

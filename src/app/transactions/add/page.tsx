@@ -262,21 +262,23 @@ export default function AddTransactionPage() {
 
         if (insertError) throw insertError
       } else {
-        // Para contas bancárias, salvar como transactions normais
+        // Para contas bancárias, salvar como bank_account_transactions
         const bankTransactions = extractedData.transactions.map((tx: any) => ({
           user_id: user.id,
           account_id: accountId,
-          amount: tx.amount,
+          amount: Math.abs(Number(tx.amount)),
           currency: extractedData.accountInfo?.currency || 'EUR',
-          description: tx.description,
+          description: tx.description || tx.merchant,
           transaction_date: tx.date,
-          type: tx.type,
+          transaction_type: (tx.type === 'credit' ? 'credit' : 'debit'),
           category_name_raw: tx.category,
-          bank_name_raw: extractedData.detectedBank
+          merchant_name: tx.merchant,
+          pattern_matched: tx.pattern_matched,
+          confidence_score: tx.confidence
         }))
 
         const { error: insertError } = await supabase
-          .from('transactions')
+          .from('bank_account_transactions')
           .insert(bankTransactions)
 
         if (insertError) throw insertError
