@@ -469,8 +469,10 @@ export async function POST(request: NextRequest) {
             }
             let matchedTxId: string | null = null
             if (Array.isArray(inserted) && typeof rTotal === 'number') {
+              // Converter o total do recibo para a moeda do cartão para comparar com tx.amount
+              const rTotalConverted = convertAmount(Math.abs(Number(rTotal)), sourceCurrency, cardCurrency)
               let found = (inserted as any[]).find((tx: any) => {
-                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(rTotal))
+                const amtEqual = Math.abs(Number(tx.amount)) === Math.abs(Number(rTotalConverted))
                 const dateEqual = sameDay(tx.transaction_date, r.date)
                 return amtEqual && dateEqual
               })
@@ -478,7 +480,7 @@ export async function POST(request: NextRequest) {
                 const tol = 0.01
                 found = (inserted as any[]).find((tx: any) => {
                   const dateEqual = sameDay(tx.transaction_date, r.date)
-                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(rTotal)))
+                  const diff = Math.abs(Math.abs(Number(tx.amount)) - Math.abs(Number(rTotalConverted)))
                   return dateEqual && diff <= tol
                 })
               }
