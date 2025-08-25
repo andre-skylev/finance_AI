@@ -4,11 +4,14 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useAuth } from '@/components/AuthProvider'
 import { createClient } from '@/lib/supabase/client'
-import { ArrowLeft, Eye, EyeOff, FileText, Plus, CreditCard as CreditCardIcon } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, FileText, Plus, CreditCard as CreditCardIcon, Pencil, Trash } from 'lucide-react'
 import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
 import { useCategories } from '@/hooks/useFinanceData'
 import PDFUploader from '@/components/PDFUploader'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { Button } from '@/components/ui/button'
 
 type CardTx = {
 	id: string
@@ -20,6 +23,7 @@ type CardTx = {
 	transaction_type: 'purchase' | 'payment'
 	installments?: number | null
 	installment_number?: number | null
+	category_id?: string | null
 }
 
 type CreditCard = {
@@ -51,6 +55,15 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		category_id: ''
 	})
 	const [saving, setSaving] = useState(false)
+	const [editing, setEditing] = useState<CardTx | null>(null)
+	const [editForm, setEditForm] = useState({
+		transaction_type: 'purchase' as 'purchase' | 'payment',
+		amount: '',
+		date: new Date().toISOString().split('T')[0],
+		description: '',
+		merchant_name: '',
+		category_id: ''
+	})
 
 	const t = useMemo(() => ({
 		title: language === 'pt' ? 'Movimentações do Cartão' : 'Card Movements',
@@ -90,9 +103,9 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 				if (cErr) throw cErr
 				setCard(c as any)
 
-				const { data: txs, error: txErr } = await supabase
+						const { data: txs, error: txErr } = await supabase
 					.from('credit_card_transactions')
-					.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
+							.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
 					.eq('user_id', user.id)
 					.eq('credit_card_id', id)
 					.order('transaction_date', { ascending: false })
@@ -123,46 +136,49 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		try {
 			setSaving(true)
 			const isPurchase = form.type === 'purchase'
-			const toInsert = {
-				user_id: user.id,
-				credit_card_id: card.id,
-				transaction_date: form.date,
-				merchant_name: form.description || null,
-				description: form.description || null,
-				amount: Math.abs(amt),
-				currency: card.currency || 'EUR',
-				transaction_type: isPurchase ? 'purchase' : 'payment',
-				installments: 1,
-				installment_number: 1,
-				category_id: isPurchase && form.category_id ? form.category_id : null,
+			// merchant_name is NOT NULL in DB; ensure a fallback label
+			const merchant = (form.description || '').trim() || (language === 'pt' ? 'Lançamento manual' : 'Manual entry')
+			// Use server API to insert and update balance atomically
+			const res = await fetch('/api/credit-card-transactions', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					credit_card_id: card.id,
+					transaction_date: form.date,
+					description: form.description || null,
+					merchant_name: merchant,
+					amount: Math.abs(amt),
+					currency: card.currency || 'EUR',
+					transaction_type: isPurchase ? 'purchase' : 'payment',
+					installments: 1,
+					installment_number: 1,
+					category_id: isPurchase && form.category_id ? form.category_id : null,
+				})
+			})
+			if (!res.ok) {
+				const j = await res.json().catch(() => ({}))
+				throw new Error(j.error || `HTTP ${res.status}`)
 			}
-			const { error: insErr } = await supabase.from('credit_card_transactions').insert([toInsert])
-			if (insErr) throw insErr
-
-			// Update current balance: purchases add, payments subtract
-			const delta = isPurchase ? Math.abs(amt) : -Math.abs(amt)
-			const newBalance = (card.current_balance ?? 0) + delta
-			const { data: updCard, error: updErr } = await supabase
-				.from('credit_cards')
-				.update({ current_balance: newBalance })
-				.eq('id', card.id)
-				.eq('user_id', user.id)
-				.select('id, card_name, bank_name, currency, credit_limit, current_balance')
-				.single()
-			if (updErr) throw updErr
-			setCard(updCard as any)
 
 			// Refresh list
-			const { data: txs } = await supabase
+						const { data: txs } = await supabase
 				.from('credit_card_transactions')
-				.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
+							.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
 				.eq('user_id', user.id)
 				.eq('credit_card_id', card.id)
 				.order('transaction_date', { ascending: false })
 			setMovements((txs || []) as any)
+			// Refresh card from DB to get updated balance
+			const { data: updCard } = await supabase
+				.from('credit_cards')
+				.select('id, card_name, bank_name, currency, credit_limit, current_balance')
+				.eq('id', card.id)
+				.eq('user_id', user.id)
+				.single()
+			if (updCard) setCard(updCard as any)
 			setForm({ type: 'purchase', amount: '', date: new Date().toISOString().split('T')[0], description: '', category_id: '' })
 		} catch (e) {
-			console.error(e)
+			console.error('Failed to add credit card movement:', e)
 		} finally {
 			setSaving(false)
 		}
@@ -219,7 +235,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 						<PDFUploader onSuccess={async () => {
 							const { data: txs } = await supabase
 								.from('credit_card_transactions')
-								.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number')
+								.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
 								.eq('user_id', user!.id)
 								.eq('credit_card_id', card.id)
 								.order('transaction_date', { ascending: false })
@@ -309,6 +325,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 									<th className="py-2 px-3">{t.desc}</th>
 									<th className="py-2 px-3 text-right">{t.amount}</th>
 									<th className="py-2 px-3">{t.type}</th>
+									<th className="py-2 px-3"></th>
 								</tr>
 							</thead>
 							<tbody>
@@ -321,6 +338,52 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 											{formatCurrency(Math.abs(m.amount), card?.currency || m.currency)}
 										</td>
 										<td className="py-2 px-3">{m.transaction_type === 'purchase' ? t.purchase : t.payment}</td>
+										<td className="py-2 px-3 text-right">
+											<div className="flex justify-end gap-2">
+												<button
+												onClick={() => {
+													setEditing(m)
+													setEditForm({
+														transaction_type: m.transaction_type,
+														amount: String(Math.abs(m.amount)),
+														date: m.transaction_date.slice(0,10),
+														description: m.description || '',
+														merchant_name: m.merchant_name || '',
+														category_id: m.category_id || ''
+													})
+												}}
+												className="inline-flex items-center gap-1 rounded border px-2 py-1 hover:bg-gray-50"
+											>
+												<Pencil className="h-4 w-4" />
+											</button>
+											<button
+												className="inline-flex items-center gap-1 rounded border px-2 py-1 hover:bg-red-50 text-red-600"
+												onClick={async()=>{
+													if(!card) return
+													try{
+														const res=await fetch('/api/credit-card-transactions',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:m.id})})
+														if(!res.ok){const j=await res.json().catch(()=>({})); throw new Error(j.error||`HTTP ${res.status}`)}
+														const { data: txs } = await supabase
+															.from('credit_card_transactions')
+															.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
+															.eq('user_id', user!.id)
+															.eq('credit_card_id', card.id)
+															.order('transaction_date', { ascending: false })
+														setMovements((txs||[]) as any)
+														const { data: updCard } = await supabase
+															.from('credit_cards')
+															.select('id, card_name, bank_name, currency, credit_limit, current_balance')
+															.eq('id', card.id)
+															.eq('user_id', user!.id)
+															.single()
+														if(updCard) setCard(updCard as any)
+													} catch(e){ console.error(e) }
+												}}
+											>
+												<Trash className="h-4 w-4" />
+											</button>
+											</div>
+										</td>
 									</tr>
 								))}
 							</tbody>
@@ -328,6 +391,90 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 					</div>
 				)}
 			</div>
+
+			<Dialog open={!!editing} onOpenChange={(open)=>{ if (!open) setEditing(null) }}>
+			<DialogContent>
+				<DialogHeader>
+					<DialogTitle>{language === 'pt' ? 'Editar movimentação' : 'Edit movement'}</DialogTitle>
+				</DialogHeader>
+				{editing && (
+					<div className="space-y-3">
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-2">
+								<Label>{t.type}</Label>
+								<select className="px-3 py-2 rounded-md border w-full" value={editForm.transaction_type} onChange={(e)=>setEditForm((p)=>({ ...p, transaction_type: e.target.value as any }))}>
+									<option value="purchase">{t.purchase}</option>
+									<option value="payment">{t.payment}</option>
+								</select>
+							</div>
+							<div className="space-y-2">
+								<Label>{t.amount}</Label>
+								<input type="number" step="0.01" className="px-3 py-2 rounded-md border w-full" value={editForm.amount} onChange={(e)=>setEditForm((p)=>({ ...p, amount: e.target.value }))} />
+							</div>
+						</div>
+						<div className="grid grid-cols-2 gap-3">
+							<div className="space-y-2">
+								<Label>{t.date}</Label>
+								<input type="date" className="px-3 py-2 rounded-md border w-full" value={editForm.date} onChange={(e)=>setEditForm((p)=>({ ...p, date: e.target.value }))} />
+							</div>
+							<div className="space-y-2">
+								<Label>{language==='pt'?'Estabelecimento':'Merchant'}</Label>
+								<input className="px-3 py-2 rounded-md border w-full" value={editForm.merchant_name} onChange={(e)=>setEditForm((p)=>({ ...p, merchant_name: e.target.value }))} />
+							</div>
+						</div>
+						<div className="space-y-2">
+							<Label>{t.desc}</Label>
+							<input className="px-3 py-2 rounded-md border w-full" value={editForm.description} onChange={(e)=>setEditForm((p)=>({ ...p, description: e.target.value }))} />
+						</div>
+						<div className="space-y-2">
+							<Label>{language==='pt'?'Categoria':'Category'}</Label>
+							<select className="px-3 py-2 rounded-md border w-full" value={editForm.category_id} onChange={(e)=>setEditForm((p)=>({ ...p, category_id: e.target.value }))}>
+								<option value="">{language==='pt'?'Sem categoria':'No category'}</option>
+								{categories.filter((c:any)=>c.type==='expense').map((c:any)=>(
+									<option key={c.id} value={c.id}>{c.name}</option>
+								))}
+							</select>
+						</div>
+						<div className="flex justify-end gap-2 pt-2">
+							<Button variant="outline" onClick={()=>setEditing(null)}>{language==='pt'?'Cancelar':'Cancel'}</Button>
+							<Button onClick={async()=>{
+								if(!editing||!card) return
+								const body={
+									id: editing.id,
+									transaction_date: editForm.date,
+									merchant_name: editForm.merchant_name,
+									description: editForm.description,
+									amount: Math.abs(parseFloat(editForm.amount||'0')),
+									currency: card.currency||'EUR',
+									transaction_type: editForm.transaction_type,
+									category_id: editForm.category_id||null
+								}
+								try{
+									const res=await fetch('/api/credit-card-transactions',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+									if(!res.ok){const j=await res.json().catch(()=>({})); throw new Error(j.error||`HTTP ${res.status}`)}
+									// Refresh list and card
+				    const { data: txs } = await supabase
+										.from('credit_card_transactions')
+					    .select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
+										.eq('user_id', user!.id)
+										.eq('credit_card_id', card.id)
+										.order('transaction_date', { ascending: false })
+									setMovements((txs||[]) as any)
+									const { data: updCard } = await supabase
+										.from('credit_cards')
+										.select('id, card_name, bank_name, currency, credit_limit, current_balance')
+										.eq('id', card.id)
+										.eq('user_id', user!.id)
+										.single()
+									if(updCard) setCard(updCard as any)
+									setEditing(null)
+								} catch(e){ console.error(e) }
+							}}>{language==='pt'?'Salvar':'Save'}</Button>
+						</div>
+					</div>
+				)}
+			</DialogContent>
+			</Dialog>
 		</ProtectedRoute>
 	)
 }

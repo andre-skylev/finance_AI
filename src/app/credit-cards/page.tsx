@@ -329,6 +329,7 @@ export default function CreditCardsPage() {
                     >
                       <option value="EUR">EUR</option>
                       <option value="BRL">BRL</option>
+                      <option value="USD">USD</option>
                     </select>
                   </div>
                 </div>

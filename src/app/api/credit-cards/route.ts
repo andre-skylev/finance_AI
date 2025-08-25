@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
 
     // Get user's credit cards
     const { data: creditCards, error } = await supabase
+      .schema('public')
       .from('credit_cards')
       .select('*')
       .eq('user_id', user.id)
@@ -69,6 +70,7 @@ export async function POST(request: NextRequest) {
 
     // Create new credit card
     const { data: creditCard, error } = await supabase
+      .schema('public')
       .from('credit_cards')
       .insert({
         user_id: user.id,
@@ -137,6 +139,7 @@ export async function PUT(request: NextRequest) {
 
     // Update credit card
     const { data: creditCard, error } = await supabase
+      .schema('public')
       .from('credit_cards')
       .update({
         card_name,
@@ -191,6 +194,7 @@ export async function DELETE(request: NextRequest) {
 
     // Verificar se o cartão pertence ao usuário
     const { data: creditCard, error: cardError } = await supabase
+      .schema('public')
       .from('credit_cards')
       .select('id, card_name, bank_name')
       .eq('id', id)
@@ -207,6 +211,7 @@ export async function DELETE(request: NextRequest) {
       
       // Excluir transações do cartão
       const { error: transactionsError } = await supabase
+        .schema('public')
         .from('credit_card_transactions')
         .delete()
         .eq('credit_card_id', id)
@@ -219,6 +224,7 @@ export async function DELETE(request: NextRequest) {
 
       // Excluir o cartão
       const { data: deletedCard, error: deleteError } = await supabase
+        .schema('public')
         .from('credit_cards')
         .delete()
         .eq('id', id)
@@ -238,6 +244,7 @@ export async function DELETE(request: NextRequest) {
     } else {
       // Soft delete by setting is_active to false
       const { data: creditCard, error } = await supabase
+        .schema('public')
         .from('credit_cards')
         .update({ is_active: false })
         .eq('id', id)

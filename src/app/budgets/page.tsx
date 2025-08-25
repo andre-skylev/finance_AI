@@ -15,7 +15,7 @@ type Budget = {
   user_id: string
   category_id: string
   amount: number
-  currency: 'EUR'|'BRL'
+  currency: 'EUR'|'BRL'|'USD'
   period: 'monthly'|'weekly'|'yearly'|'semiannual'|'one_time'|'custom'
   mode?: 'absolute'|'percent_income'
   percent?: number|null
@@ -72,21 +72,29 @@ export default function BudgetsPage(){
     setCustomEnd('')
     setOpen(true) 
   }
-  const openEdit = (row:any)=>{
+  const openEdit = async (row:any)=>{
+    // Fetch original budget to get mode/percent
+    const { data: orig } = await supabase
+      .from('budgets')
+      .select('id, user_id, category_id, amount, currency, period, start_date, end_date, mode, percent')
+      .eq('id', row.id)
+      .maybeSingle()
+    const mode = (orig?.mode as any) || 'absolute'
+    const percent = (orig?.percent as any) ?? undefined
     setEditing({
       id: row.id,
       user_id: user!.id,
       category_id: row.category_id,
-      amount: row.budgeted,
+      amount: Number(orig?.amount ?? row.budgeted ?? 0),
       currency: row.currency,
       period: row.period,
-      mode: 'absolute',
-      percent: undefined,
+      mode,
+      percent: percent as any,
     } as any)
-  setForm({ category_id: row.category_id, amount: row.budgeted, currency: row.currency, period: row.period, mode: 'absolute', percent: undefined })
-  setReferenceDate((row.start_date as string) || new Date().toISOString().slice(0,10))
-  setCustomStart(row.start_date || '')
-  setCustomEnd(row.end_date || '')
+    setForm({ category_id: row.category_id, amount: Number(orig?.amount ?? row.budgeted ?? 0), currency: row.currency, period: row.period, mode, percent })
+    setReferenceDate((row.start_date as string) || new Date().toISOString().slice(0,10))
+    setCustomStart(row.start_date || '')
+    setCustomEnd(row.end_date || '')
     setOpen(true)
   }
 
@@ -263,6 +271,7 @@ export default function BudgetsPage(){
                 <select className="w-full border rounded px-2 py-2" value={form.currency as any} onChange={(e)=>setForm(f=>({...f, currency:e.target.value as any}))}>
                   <option value="EUR">EUR</option>
                   <option value="BRL">BRL</option>
+                  <option value="USD">USD</option>
                 </select>
               </div>
               <div>
@@ -298,6 +307,7 @@ export default function BudgetsPage(){
                 <select className="w-full border rounded px-2 py-2" value={form.mode as any} onChange={(e)=>setForm(f=>({...f, mode:e.target.value as any}))}>
                   <option value="absolute">{t('budgetsPage.modes.absolute')}</option>
                   <option value="percent_income">{t('budgetsPage.modes.percentIncome')}</option>
+                  <option value="percent_profit">{t('budgetsPage.modes.percentProfit')}</option>
                 </select>
               </div>
               {form.mode === 'percent_income' ? (

@@ -17,7 +17,7 @@ export function CurrencyDropdown({ disabled, onChangeStart, onChangeEnd, loading
   const { t } = useLanguage()
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const next = e.target.value as 'EUR'|'BRL'
+    const next = e.target.value as 'EUR'|'BRL'|'USD'
     if (next === displayCurrency) return
     onChangeStart?.()
     setDisplayCurrency(next)
@@ -38,6 +38,7 @@ export function CurrencyDropdown({ disabled, onChangeStart, onChangeEnd, loading
       >
         <option value="EUR">EUR</option>
         <option value="BRL">BRL</option>
+  <option value="USD">USD</option>
       </select>
       {loading && (
         <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />

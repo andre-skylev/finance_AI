@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   const { transactions, target, receipts, currency: sourceCurrencyRaw, documentCurrency } = await request.json()
 
-  // Setup exchange conversion EUR<->BRL (today -> latest -> env fallback)
+  // Setup exchange conversion EUR/BRL/USD (today -> latest -> env fallback)
   const todayStr = new Date().toISOString().split('T')[0]
   const { data: todayRate } = await supabase
     .from('exchange_rates')
@@ -22,6 +22,10 @@ export async function POST(request: NextRequest) {
     .maybeSingle()
   let eur_to_brl: number | null = todayRate ? Number(todayRate.eur_to_brl) : null
   let brl_to_eur: number | null = todayRate ? Number(todayRate.brl_to_eur) : null
+  let eur_to_usd: number | null = todayRate && todayRate.eur_to_usd != null ? Number(todayRate.eur_to_usd) : null
+  let usd_to_eur: number | null = todayRate && todayRate.usd_to_eur != null ? Number(todayRate.usd_to_eur) : (eur_to_usd ? 1/eur_to_usd : null)
+  let usd_to_brl: number | null = todayRate && todayRate.usd_to_brl != null ? Number(todayRate.usd_to_brl) : null
+  let brl_to_usd: number | null = todayRate && todayRate.brl_to_usd != null ? Number(todayRate.brl_to_usd) : (usd_to_brl ? 1/(usd_to_brl as number) : null)
   if (!eur_to_brl || !brl_to_eur) {
     const { data: latest } = await supabase
       .from('exchange_rates')
@@ -32,6 +36,10 @@ export async function POST(request: NextRequest) {
     if (latest) {
       eur_to_brl = Number(latest.eur_to_brl)
       brl_to_eur = Number(latest.brl_to_eur)
+      eur_to_usd = latest.eur_to_usd != null ? Number(latest.eur_to_usd) : eur_to_usd
+      usd_to_eur = latest.usd_to_eur != null ? Number(latest.usd_to_eur) : (eur_to_usd ? 1/(eur_to_usd as number) : usd_to_eur)
+      usd_to_brl = latest.usd_to_brl != null ? Number(latest.usd_to_brl) : usd_to_brl
+      brl_to_usd = latest.brl_to_usd != null ? Number(latest.brl_to_usd) : (usd_to_brl ? 1/(usd_to_brl as number) : brl_to_usd)
     }
   }
   if (!eur_to_brl || !brl_to_eur) {
@@ -48,6 +56,16 @@ export async function POST(request: NextRequest) {
     if (from === to) return amountAbs
     if (from === 'EUR' && to === 'BRL' && eur_to_brl) return amountAbs * eur_to_brl
     if (from === 'BRL' && to === 'EUR' && brl_to_eur) return amountAbs * brl_to_eur
+    if (from === 'EUR' && to === 'USD' && (eur_to_usd || usd_to_eur)) return amountAbs * (eur_to_usd ?? (1/(usd_to_eur as number)))
+    if (from === 'USD' && to === 'EUR' && (usd_to_eur || eur_to_usd)) return amountAbs * (usd_to_eur ?? (1/(eur_to_usd as number)))
+    if (from === 'USD' && to === 'BRL') {
+      const rate = usd_to_brl ?? ((eur_to_brl && eur_to_usd) ? (eur_to_brl / eur_to_usd) : null)
+      if (rate) return amountAbs * rate
+    }
+    if (from === 'BRL' && to === 'USD') {
+      const rate = brl_to_usd ?? (usd_to_brl ? 1/(usd_to_brl as number) : ((brl_to_eur && usd_to_eur) ? (brl_to_eur * (usd_to_eur as number)) : null))
+      if (rate) return amountAbs * rate
+    }
     return amountAbs
   }
 
@@ -91,9 +109,10 @@ export async function POST(request: NextRequest) {
       if (Array.isArray(receipts) && receipts.length === 1) {
         const r = receipts[0]
         const accountCurrency = (account?.currency || 'EUR').toUpperCase()
-        const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, accountCurrency) : null
-        const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, accountCurrency) : null
-        const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, accountCurrency) : null
+        const storedCurrency = (sourceCurrency || accountCurrency).toUpperCase()
+        const rSubtotal = typeof r.subtotal === 'number' ? Math.abs(Number(r.subtotal)) : null
+        const rTax = typeof r.tax === 'number' ? Math.abs(Number(r.tax)) : null
+        const rTotal = typeof r.total === 'number' ? Math.abs(Number(r.total)) : null
         const { data: receiptRow, error: recErr } = await supabase
           .from('receipts')
           .insert({
@@ -104,7 +123,7 @@ export async function POST(request: NextRequest) {
             subtotal: rSubtotal,
             tax: rTax,
             total: rTotal,
-            currency: accountCurrency,
+            currency: storedCurrency,
             created_at: new Date().toISOString(),
           })
           .select('id')
@@ -294,11 +313,12 @@ export async function POST(request: NextRequest) {
               console.log('PDF Confirm - Transação correspondente encontrada:', matchedTxId)
             }
 
-            // Persist receipt in account currency for consistency
-            const accountCurrency = (account?.currency || 'EUR').toUpperCase()
-            const convertedSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, accountCurrency) : null
-            const convertedTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, accountCurrency) : null
-            const convertedTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, accountCurrency) : null
+      // Persist receipt in original document currency
+      const accountCurrency = (account?.currency || 'EUR').toUpperCase()
+      const storedCurrency = (sourceCurrency || accountCurrency).toUpperCase()
+      const convertedSubtotal = typeof r.subtotal === 'number' ? Math.abs(Number(r.subtotal)) : null
+      const convertedTax = typeof r.tax === 'number' ? Math.abs(Number(r.tax)) : null
+      const convertedTotal = typeof r.total === 'number' ? Math.abs(Number(r.total)) : null
 
             const { data: receiptRow, error: recErr } = await supabase
               .from('receipts')
@@ -310,7 +330,7 @@ export async function POST(request: NextRequest) {
                 subtotal: convertedSubtotal,
                 tax: convertedTax,
                 total: convertedTotal,
-                currency: accountCurrency,
+        currency: storedCurrency,
                 created_at: new Date().toISOString(),
               })
               .select()
@@ -369,9 +389,10 @@ export async function POST(request: NextRequest) {
       if (Array.isArray(receipts) && receipts.length === 1) {
         const r = receipts[0]
         const cardCurrency = (card.currency || 'EUR').toUpperCase()
-        const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, cardCurrency) : null
-        const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, cardCurrency) : null
-        const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, cardCurrency) : null
+        const storedCurrency = (sourceCurrency || cardCurrency).toUpperCase()
+        const rSubtotal = typeof r.subtotal === 'number' ? Math.abs(Number(r.subtotal)) : null
+        const rTax = typeof r.tax === 'number' ? Math.abs(Number(r.tax)) : null
+        const rTotal = typeof r.total === 'number' ? Math.abs(Number(r.total)) : null
         const { data: receiptRow, error: recErr } = await supabase
           .from('receipts')
           .insert({
@@ -382,7 +403,7 @@ export async function POST(request: NextRequest) {
             subtotal: rSubtotal,
             tax: rTax,
             total: rTotal,
-            currency: cardCurrency,
+            currency: storedCurrency,
             created_at: new Date().toISOString(),
           })
           .select('id')
@@ -428,13 +449,14 @@ export async function POST(request: NextRequest) {
 
       // Salvar recibos e vincular por matching quando houver múltiplos recibos
       let receiptsSaved = 0
-      if (Array.isArray(receipts) && receipts.length > 0 && !precreatedReceiptId) {
+  if (Array.isArray(receipts) && receipts.length > 0 && !precreatedReceiptId) {
         for (const r of receipts) {
           try {
-            const cardCurrency = (card.currency || 'EUR').toUpperCase()
-            const rSubtotal = typeof r.subtotal === 'number' ? convertAmount(Math.abs(Number(r.subtotal)), sourceCurrency, cardCurrency) : null
-            const rTax = typeof r.tax === 'number' ? convertAmount(Math.abs(Number(r.tax)), sourceCurrency, cardCurrency) : null
-            const rTotal = typeof r.total === 'number' ? convertAmount(Math.abs(Number(r.total)), sourceCurrency, cardCurrency) : null
+    const cardCurrency = (card.currency || 'EUR').toUpperCase()
+    const storedCurrency = (sourceCurrency || cardCurrency).toUpperCase()
+    const rSubtotal = typeof r.subtotal === 'number' ? Math.abs(Number(r.subtotal)) : null
+    const rTax = typeof r.tax === 'number' ? Math.abs(Number(r.tax)) : null
+    const rTotal = typeof r.total === 'number' ? Math.abs(Number(r.total)) : null
 
             // Tentar achar transação correspondente por valor e mesma data
             const sameDay = (a?: string, b?: string) => {
@@ -470,7 +492,7 @@ export async function POST(request: NextRequest) {
                 subtotal: rSubtotal,
                 tax: rTax,
                 total: rTotal,
-                currency: cardCurrency,
+                currency: storedCurrency,
                 created_at: new Date().toISOString(),
               })
               .select('id')
@@ -554,9 +576,10 @@ export async function POST(request: NextRequest) {
         if (Array.isArray(receipts) && receipts.length > 0) {
           const firstReceipt = receipts[0]
       const accCurrency = (userAccounts?.[0]?.currency || 'EUR').toUpperCase()
-      const rSubtotal = typeof firstReceipt.subtotal === 'number' ? convertAmount(Math.abs(Number(firstReceipt.subtotal)), sourceCurrency, accCurrency) : null
-      const rTax = typeof firstReceipt.tax === 'number' ? convertAmount(Math.abs(Number(firstReceipt.tax)), sourceCurrency, accCurrency) : null
-      const rTotal = typeof firstReceipt.total === 'number' ? convertAmount(Math.abs(Number(firstReceipt.total)), sourceCurrency, accCurrency) : null
+      const storedCurrency = (sourceCurrency || accCurrency).toUpperCase()
+      const rSubtotal = typeof firstReceipt.subtotal === 'number' ? Math.abs(Number(firstReceipt.subtotal)) : null
+      const rTax = typeof firstReceipt.tax === 'number' ? Math.abs(Number(firstReceipt.tax)) : null
+      const rTotal = typeof firstReceipt.total === 'number' ? Math.abs(Number(firstReceipt.total)) : null
       const { data: receiptRow, error: recErr } = await supabase
             .from('receipts')
             .insert({
@@ -567,7 +590,7 @@ export async function POST(request: NextRequest) {
         subtotal: rSubtotal,
         tax: rTax,
         total: rTotal,
-        currency: accCurrency,
+        currency: storedCurrency,
             })
             .select('id')
             .single()

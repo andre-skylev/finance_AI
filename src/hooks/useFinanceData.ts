@@ -303,6 +303,35 @@ export function useCategories() {
     }
   }
 
+  const updateCategory = async (id: string, updates: Partial<Omit<Category, 'id' | 'is_default'>>) => {
+    try {
+      const response = await fetch('/api/categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, ...updates })
+      })
+      const data = await response.json()
+      if (!response.ok) throw new Error(data.error || 'Failed to update category')
+      await fetchCategories()
+      return data.category
+    } catch (err) {
+      throw err
+    }
+  }
+
+  const deleteCategory = async (id: string) => {
+    try {
+      const response = await fetch(`/api/categories?id=${id}`, { method: 'DELETE' })
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete category')
+      }
+      await fetchCategories()
+    } catch (err) {
+      throw err
+    }
+  }
+
   useEffect(() => {
     fetchCategories()
   }, [])
@@ -312,7 +341,9 @@ export function useCategories() {
     loading,
     error,
     refetch: fetchCategories,
-    createCategory
+  createCategory,
+  updateCategory,
+  deleteCategory
   }
 }
 

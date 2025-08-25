@@ -8,7 +8,7 @@ import { useCurrency } from '@/hooks/useCurrency';
 
 export function NetWorth() {
   const { t } = useLanguage();
-  const { displayCurrency, formatWithConversion } = useCurrency();
+  const { displayCurrency, format, formatNumeric } = useCurrency();
   const [data, setData] = useState<Array<{name:string; value:number}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -49,14 +49,14 @@ export function NetWorth() {
               </linearGradient>
             </defs>
             <XAxis dataKey="name" stroke="hsl(var(--foreground))" />
-            <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => formatWithConversion(v, 'EUR').replace(/[€R\$\s]/g, '')} />
+              <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => formatNumeric(v)} />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
               contentStyle={{
                 backgroundColor: "hsl(var(--background))",
                 borderColor: "hsl(var(--border))",
               }}
-              formatter={(value: number) => [formatWithConversion(Number(value), 'EUR'), t('dashboard.netWorth')]}
+              formatter={(value: number) => [format(Number(value)), t('dashboard.netWorth')]}
             />
             <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
           </AreaChart>

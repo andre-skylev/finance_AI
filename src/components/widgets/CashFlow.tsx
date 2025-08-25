@@ -8,7 +8,7 @@ import { useCurrency } from '@/hooks/useCurrency';
 
 export function CashFlow() {
   const { t } = useLanguage();
-  const { displayCurrency, formatWithConversion } = useCurrency();
+  const { displayCurrency, format, formatNumeric } = useCurrency();
   const [data, setData] = useState<Array<{month:string; income:number; expenses:number; net:number}>>([])
   const [loading, setLoading] = useState(true)
 
@@ -60,7 +60,7 @@ export function CashFlow() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => formatWithConversion(value, 'EUR').replace(/[€R\$\s]/g, '')}  // Clean format for axis
+              tickFormatter={(value) => formatNumeric(value)}
             />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
@@ -75,8 +75,8 @@ export function CashFlow() {
                   expenses: t('dashboard.expenses'), 
                   net: t('dashboard.netBalance')
                 };
-                const symbol = displayCurrency === 'EUR' ? '€' : 'R$'
-                return [formatWithConversion(value, 'EUR'), labels[name] || name];
+                // Values are already in displayCurrency from API; just format
+                return [format(value), labels[name] || name];
               }}
             />
             <Bar dataKey="income" fill="url(#incomeGradient)" radius={[4, 4, 0, 0]} />

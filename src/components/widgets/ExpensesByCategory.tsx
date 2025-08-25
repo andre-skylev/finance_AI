@@ -77,7 +77,7 @@ export function ExpensesByCategory() {
             <span className="font-medium text-sm">{data.payload.name}</span>
           </div>
           <div className="text-sm text-muted-foreground">
-            {(displayCurrency === 'EUR' ? '€' : 'R$')}{Number(data.value || 0).toLocaleString()}
+            {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }).format(Number(data.value || 0))}
           </div>
         </div>
       );
@@ -141,7 +141,7 @@ export function ExpensesByCategory() {
                       <span className="text-sm font-medium truncate">{item.name}</span>
                     </div>
                     <div className="flex items-center gap-2 text-sm">
-                      <span className="font-semibold">{displayCurrency === 'EUR' ? '€' : 'R$'}{item.value.toLocaleString()}</span>
+                      <span className="font-semibold">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }).format(item.value)}</span>
                     </div>
                   </div>
                   <div className="mt-1 ml-7">
@@ -167,7 +167,7 @@ export function ExpensesByCategory() {
         <div className="mt-6 pt-4 border-t">
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">Total de Gastos</span>
-            <span className="text-lg font-bold">{displayCurrency === 'EUR' ? '€' : 'R$'}{total.toLocaleString()}</span>
+            <span className="text-lg font-bold">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency }).format(total)}</span>
           </div>
         </div>
         </>

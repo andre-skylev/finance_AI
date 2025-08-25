@@ -9,6 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { CreditCard, CalendarDays, TrendingUp, DollarSign, Clock } from 'lucide-react'
+import { useCurrency } from '@/contexts/CurrencyContext'
+import CurrencyDropdown from '@/components/CurrencyDropdown'
+
+type Currency = 'EUR'|'BRL'|'USD'
 
 interface Installment {
   id: string
@@ -37,6 +41,7 @@ interface InstallmentGroup {
   installments: Installment[]
   credit_card_name: string
   next_payment_date?: string
+  currency?: string
 }
 
 export default function InstallmentsPage() {
@@ -46,6 +51,7 @@ export default function InstallmentsPage() {
   const [installmentGroups, setInstallmentGroups] = useState<InstallmentGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all')
+  const { displayCurrency, convert } = useCurrency()
 
   useEffect(() => {
     if (user) {
@@ -88,6 +94,7 @@ export default function InstallmentsPage() {
             tan_rate: transaction.tan_rate,
             installments: [],
             credit_card_name: `${transaction.credit_cards.bank_name} ${transaction.credit_cards.card_name}`,
+            currency: transaction.currency,
           }
         }
         
@@ -173,6 +180,7 @@ export default function InstallmentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Parcelamentos</h1>
             <p className="text-gray-600">Gerencie suas compras parceladas</p>
           </div>
+          <CurrencyDropdown />
         </div>
 
         {/* Stats Cards */}
@@ -194,7 +202,7 @@ export default function InstallmentsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-600">Valor Restante</p>
-                  <p className="text-2xl font-bold text-gray-900">€{totalRemaining.toFixed(2)}</p>
+                  <p className="text-2xl font-bold text-gray-900">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(totalRemaining)}</p>
                 </div>
                 <DollarSign className="h-8 w-8 text-green-600" />
               </div>
@@ -253,7 +261,7 @@ export default function InstallmentsPage() {
                     </div>
                     <div className="text-right">
                       <p className="text-lg font-bold text-gray-900">
-                        €{group.original_amount.toFixed(2)}
+                        {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(group.original_amount, (group as any).currency as Currency, displayCurrency as Currency))}
                       </p>
                       {group.tan_rate && (
                         <p className="text-xs text-gray-500">TAN: {group.tan_rate}%</p>
@@ -282,7 +290,7 @@ export default function InstallmentsPage() {
                       <div>
                         <p className="text-gray-600">Valor por prestação</p>
                         <p className="font-semibold">
-                          €{group.installments[0]?.amount.toFixed(2) || '0.00'}
+                          {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(group.installments[0]?.amount || 0, (group as any).currency as Currency, displayCurrency as Currency))}
                         </p>
                       </div>
                       {!isCompleted && (
@@ -290,7 +298,7 @@ export default function InstallmentsPage() {
                           <div>
                             <p className="text-gray-600">Valor restante</p>
                             <p className="font-semibold text-red-600">
-                              €{group.remaining_amount.toFixed(2)}
+                              {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(group.remaining_amount, (group as any).currency as Currency, displayCurrency as Currency))}
                             </p>
                           </div>
                           {group.next_payment_date && (
@@ -311,7 +319,7 @@ export default function InstallmentsPage() {
                         Ver detalhes das prestações
                       </summary>
                       <div className="mt-3 space-y-2">
-                        {group.installments.map((installment) => (
+        {group.installments.map((installment) => (
                           <div key={installment.id} className="flex justify-between items-center py-2 px-3 bg-gray-50 rounded">
                             <div>
                               <span className="text-sm font-medium">
@@ -322,7 +330,7 @@ export default function InstallmentsPage() {
                               </p>
                             </div>
                             <span className="font-semibold">
-                              €{installment.amount.toFixed(2)}
+          {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(installment.amount, installment.currency as Currency, displayCurrency as Currency))}
                             </span>
                           </div>
                         ))}

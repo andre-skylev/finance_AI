@@ -10,11 +10,13 @@ import CurrencyDropdown from '@/components/CurrencyDropdown'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import { useAccounts } from '@/hooks/useFinanceData'
 
+type Currency = 'EUR'|'BRL'|'USD'
+
 type FixedIncome = {
   id: string
   name: string
   amount: number
-  currency: 'EUR'|'BRL'
+  currency: Currency
   billing_period: 'weekly'|'monthly'|'yearly'
   start_date: string
   end_date: string | null
@@ -36,7 +38,7 @@ export default function FixedIncomesPage() {
   const [form, setForm] = useState({
     name: '',
     amount: '',
-    currency: 'EUR' as 'EUR'|'BRL',
+  currency: 'EUR' as 'EUR'|'BRL'|'USD',
     billing_period: 'monthly' as 'weekly'|'monthly'|'yearly',
     start_date: new Date().toISOString().split('T')[0],
     end_date: '',
@@ -110,7 +112,7 @@ export default function FixedIncomesPage() {
   const monthlyAmount = (amount: number, period: string) => period === 'weekly' ? amount * 4.33 : period === 'yearly' ? amount/12 : amount
   const totalMonthly = items
     .filter(i => i.is_active)
-    .reduce((s,i)=> s + convert(monthlyAmount(i.amount, i.billing_period), i.currency as 'EUR'|'BRL', displayCurrency), 0)
+  .reduce((s,i)=> s + convert(monthlyAmount(i.amount, i.billing_period), i.currency as Currency, displayCurrency as Currency), 0)
 
   if (loading) return (
     <ProtectedRoute>
@@ -136,7 +138,7 @@ export default function FixedIncomesPage() {
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-lg font-medium text-gray-900">{t('fixedIncomes.totalMonthly')}</h3>
-              <p className="text-3xl font-bold text-green-600">{displayCurrency === 'EUR' ? '€' : 'R$'}{totalMonthly.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}</p>
+              <p className="text-3xl font-bold text-green-600">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(totalMonthly)}</p>
               <p className="text-sm text-gray-500 mt-1">{items.filter(i=>i.is_active).length} {t('fixedIncomes.activeIncomes')}</p>
             </div>
             <div className="p-3 bg-green-100 rounded-lg"><RotateCcw className="h-8 w-8 text-green-600" /></div>
@@ -159,6 +161,7 @@ export default function FixedIncomesPage() {
                     <select value={form.currency} onChange={(e)=>setForm(p=>({...p,currency:e.target.value as any}))} className="px-3 py-2 border rounded-r-lg border-l-0">
                       <option value="EUR">EUR</option>
                       <option value="BRL">BRL</option>
+                      <option value="USD">USD</option>
                     </select>
                   </div>
                 </div>
@@ -227,8 +230,8 @@ export default function FixedIncomesPage() {
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="text-right">
-                        <p className="text-lg font-semibold text-green-600">{displayCurrency === 'EUR' ? '€' : 'R$'}{convert(i.amount, i.currency as 'EUR'|'BRL', displayCurrency).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}</p>
-                        <p className="text-sm text-gray-500">≈ {displayCurrency === 'EUR' ? '€' : 'R$'}{convert(monthlyAmount(i.amount, i.billing_period), i.currency as 'EUR'|'BRL', displayCurrency).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}/{t('fixedCosts.monthly')}</p>
+                        <p className="text-lg font-semibold text-green-600">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(i.amount, i.currency as Currency, displayCurrency as Currency))}</p>
+                        <p className="text-sm text-gray-500">≈ {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(monthlyAmount(i.amount, i.billing_period), i.currency as Currency, displayCurrency as Currency))}/{t('fixedCosts.monthly')}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button onClick={()=>toggle(i.id, i.is_active)} className={`p-2 rounded-lg ${i.is_active ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`} title={i.is_active ? t('fixedCosts.deactivate') : t('fixedCosts.activate')}>

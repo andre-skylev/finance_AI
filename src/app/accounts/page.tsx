@@ -133,6 +133,7 @@ export default function AccountsPage() {
               >
                 <option value="EUR">EUR</option>
                 <option value="BRL">BRL</option>
+                <option value="USD">USD</option>
               </select>
               <input
                 className="px-3 py-2 rounded-md border"

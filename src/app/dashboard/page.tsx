@@ -30,12 +30,23 @@ export default function DashboardPage() {
       const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
       const locale = language === 'pt' ? 'pt-PT' : 'en-US'
       const when = last.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
-      const rate = displayCurrency === 'EUR' ? rates.brl_to_eur : rates.eur_to_brl
-      const pair = displayCurrency === 'EUR' ? 'BRL→EUR' : 'EUR→BRL'
       const stale = rates.stale ? (language === 'pt' ? ' • cache antigo' : ' • stale cache') : ''
       const src = rates.source ? ` • ${rates.source}` : ''
       const updated = language === 'pt' ? ' • atualizado ' : ' • updated '
-      return `${pair}: ${rate.toFixed(4)}${updated}${when}${stale}${src}`
+
+      const lines: string[] = []
+      if (displayCurrency === 'EUR') {
+        if (rates.brl_to_eur) lines.push(`BRL→EUR: ${rates.brl_to_eur.toFixed(4)}`)
+        if (rates.usd_to_eur) lines.push(`USD→EUR: ${rates.usd_to_eur.toFixed(4)}`)
+      } else if (displayCurrency === 'BRL') {
+        if (rates.eur_to_brl) lines.push(`EUR→BRL: ${rates.eur_to_brl.toFixed(4)}`)
+        if (rates.usd_to_brl) lines.push(`USD→BRL: ${rates.usd_to_brl.toFixed(4)}`)
+      } else if (displayCurrency === 'USD') {
+        if (rates.eur_to_usd) lines.push(`EUR→USD: ${rates.eur_to_usd.toFixed(4)}`)
+        if (rates.brl_to_usd) lines.push(`BRL→USD: ${rates.brl_to_usd.toFixed(4)}`)
+      }
+      if (lines.length === 0) return null
+      return `${lines.join(' • ')}${updated}${when}${stale}${src}`
     }, [rates, displayCurrency, language])
     if (!text) return null
     return (

@@ -245,7 +245,8 @@
     "mode": "Modo",
     "modes": {
       "absolute": "Valor fixo",
-      "percentIncome": "% da renda mensal"
+  "percentIncome": "% da renda mensal",
+  "percentProfit": "% do lucro mensal"
     },
     "percentLabel": "Percentual (%)"
   },

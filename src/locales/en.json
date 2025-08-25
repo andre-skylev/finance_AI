@@ -244,7 +244,8 @@
     "mode": "Mode",
     "modes": {
       "absolute": "Fixed amount",
-      "percentIncome": "% of monthly income"
+  "percentIncome": "% of monthly income",
+  "percentProfit": "% of monthly profit"
     },
     "percentLabel": "Percent (%)"
   },

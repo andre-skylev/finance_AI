@@ -340,12 +340,20 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
       }
     }
 
-    let transactions: any[] = []
-    let detectedBank = ''
-    let isReceiptMode = false
-    let parsingMethod = 'document-ai-fallback'
-    let openAIResult: any = null
-    let receipts: any[] = []
+  let transactions: any[] = []
+  let detectedBank = ''
+  let isReceiptMode = false
+  let parsingMethod = 'document-ai-fallback'
+  let openAIResult: any = null
+  let receipts: any[] = []
+  // Try to infer document currency from text markers; very lightweight
+  const textForCurrency = (document?.text || '').toUpperCase()
+  // Detect BRL first (R$), then USD (USD or US$ or standalone $), else EUR (€ or EUR)
+  const inferredCurrency = /R\$|BRL/.test(textForCurrency)
+    ? 'BRL'
+    : (/(\bUSD\b|US\$|\$)/.test(textForCurrency)
+        ? 'USD'
+        : (/€|EUR/.test(textForCurrency) ? 'EUR' : undefined))
 
     // 🤖 Tentar parsing com OpenAI se habilitado
     if (useOpenAI) {
@@ -357,7 +365,7 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
         // Procurar por seções relevantes de transações
         const sections = textToAnalyze.split(/\n\s*\n/)
         const relevantSections = sections.filter((section: string) => 
-          section.match(/\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|€|EUR|\d+,\d{2}|\d+\.\d{2}|DEBITO|CREDITO|TRF|POS|MB|ATM/i) ||
+          section.match(/\d{2}\/\d{2}\/\d{4}|\d{4}-\d{2}-\d{2}|€|EUR|USD|US\$|\$|\d+,\d{2}|\d+\.\d{2}|DEBITO|CREDITO|TRF|POS|MB|ATM/i) ||
           section.match(/movimentos|transações|operações|extrato|saldo/i)
         )
         
@@ -375,7 +383,7 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
       
       openAIResult = await parseWithOpenAI(textToAnalyze, debug)
       
-      if (openAIResult) {
+  if (openAIResult) {
         console.log('[PDF-UPLOAD] ✅ OpenAI parsing bem-sucedido!')
         parsingMethod = 'openai'
         detectedBank = openAIResult.establishment?.name || 'OpenAI-Detected'
@@ -396,7 +404,7 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
             quantity: 1,
             unitPrice: Math.abs(transaction.amount || 0)
           }))
-        } else if (openAIResult.items && openAIResult.items.length > 0) {
+  } else if (openAIResult.items && openAIResult.items.length > 0) {
           // Usar items para recibos/faturas
           transactions = openAIResult.items.map((item: any) => ({
             date: openAIResult.date || new Date().toISOString().split('T')[0],
@@ -422,7 +430,7 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
               code: item.code || null
             }))
           }]
-        } else if (openAIResult.totalAmount && openAIResult.totalAmount > 0) {
+  } else if (openAIResult.totalAmount && openAIResult.totalAmount > 0) {
           // Fallback: transação única se não há detalhes
           transactions = [{
             date: openAIResult.date || new Date().toISOString().split('T')[0],
@@ -456,6 +464,30 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
       parsingMethod = 'fallback'
     }
 
+        // Se o documento foi identificado como recibo/fatura mas não há header de recibo,
+        // cria um recibo único com base no total detectado (ou soma das linhas) para garantir vinculação.
+        if (isReceiptMode && receipts.length === 0) {
+          const totalFromAI = openAIResult?.totalAmount
+          let computedTotal: number | null = null
+          if (typeof totalFromAI === 'number' && isFinite(totalFromAI) && totalFromAI > 0) {
+            computedTotal = totalFromAI
+          } else if (transactions.length > 0) {
+            // Somar valores absolutos negativos (itens) ou tudo se sinal não for consistente
+            const negatives = transactions.filter(t => typeof t.amount === 'number' && t.amount < 0)
+            const base = negatives.length > 0 ? negatives : transactions
+            const sum = base.reduce((acc, t) => acc + Math.abs(Number(t.amount) || 0), 0)
+            computedTotal = sum > 0 ? sum : null
+          }
+          receipts = [{
+            merchant: openAIResult?.establishment?.name || 'Estabelecimento',
+            date: openAIResult?.date || new Date().toISOString().split('T')[0],
+            subtotal: null,
+            tax: null,
+            total: computedTotal,
+            items: []
+          }]
+        }
+
         // Usar data do OpenAI se disponível, senão usar data atual  
         const documentDate = openAIResult?.date || new Date().toISOString().split('T')[0]
 
@@ -471,7 +503,8 @@ Data de processamento: ${new Date().toLocaleDateString('pt-PT')}
           end: documentDate
         },
         transactions: transactions,
-        receipts: receipts
+        receipts: receipts,
+        documentCurrency: openAIResult?.currency || inferredCurrency || undefined
       },
       accounts: [],
       creditCards: [],

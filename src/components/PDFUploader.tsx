@@ -356,7 +356,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
         updateProgress(t('pdfUploader.progress.processing'), Math.floor(serverProgress))
       }, 2000)
 
-      const response = await fetch('/api/pdf-upload', {
+  const response = await fetch('/api/pdf-upload', {
         method: 'POST',
         body: formData,
       })
@@ -416,6 +416,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
         transactions: editableTransactions || [],
         target,
         receipts: extractedData.receipts || [],
+        documentCurrency: (extractedData as any)?.documentCurrency,
       })
 
       const response = await fetch('/api/pdf-confirm', {
@@ -427,6 +428,7 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
           transactions: editableTransactions || [],
           target, // acc:ID | cc:ID | rec
           receipts: extractedData.receipts || [],
+          documentCurrency: (extractedData as any)?.documentCurrency,
         }),
       })
 

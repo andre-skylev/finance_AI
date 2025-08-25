@@ -99,8 +99,8 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const body = await request.json()
-    const { id, name, icon, color, type } = body
+  const body = await request.json()
+  const { id, name, icon, color, type, parent_id } = body
 
     if (!id) {
       return NextResponse.json({ error: 'Category ID is required' }, { status: 400 })
@@ -109,7 +109,7 @@ export async function PUT(request: NextRequest) {
     // Update category (only user's own categories, not defaults)
     const { data: category, error } = await supabase
       .from('categories')
-      .update({ name, icon, color, type })
+      .update({ name, icon, color, type, parent_id })
       .eq('id', id)
       .eq('user_id', user.id)
       .eq('is_default', false)

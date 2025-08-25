@@ -48,7 +48,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
     account_id: '',
     category_id: '',
     amount: '',
-    currency: 'EUR' as 'EUR' | 'BRL',
+    currency: 'EUR' as 'EUR' | 'BRL' | 'USD',
     description: '',
     transaction_date: new Date().toISOString().split('T')[0],
     type: 'expense' as 'income' | 'expense' | 'transfer'
@@ -487,9 +487,9 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                       </div>
                     </div>
                     <div className="flex justify-between text-xs text-gray-600">
-                      <span>Subtotal: {formData.currency === 'EUR' ? '€' : 'R$'} {(item.quantity * item.unitPrice).toFixed(2)}</span>
-                      <span>IVA: {formData.currency === 'EUR' ? '€' : 'R$'} {item.taxAmount.toFixed(2)}</span>
-                      <span className="font-medium">Total: {formData.currency === 'EUR' ? '€' : 'R$'} {item.total.toFixed(2)}</span>
+                      <span>Subtotal: {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(item.quantity * item.unitPrice)}</span>
+                      <span>IVA: {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(item.taxAmount)}</span>
+                      <span className="font-medium">Total: {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(item.total)}</span>
                     </div>
                   </div>
                 ))}
@@ -561,11 +561,11 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                     <>
                       <div className="flex justify-between text-sm">
                         <span>Subtotal:</span>
-                        <span>{formData.currency === 'EUR' ? '€' : 'R$'} {items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0).toFixed(2)}</span>
+                        <span>{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0))}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>Total IVA:</span>
-                        <span>{formData.currency === 'EUR' ? '€' : 'R$'} {items.reduce((sum, item) => sum + item.taxAmount, 0).toFixed(2)}</span>
+                        <span>{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(items.reduce((sum, item) => sum + item.taxAmount, 0))}</span>
                       </div>
                       <div className="border-t pt-2"></div>
                     </>
@@ -574,11 +574,11 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                     <>
                       <div className="flex justify-between text-sm">
                         <span>Subtotal:</span>
-                        <span>{formData.currency === 'EUR' ? '€' : 'R$'} {parseFloat(subtotal).toFixed(2)}</span>
+                        <span>{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(parseFloat(subtotal))}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span>IVA ({generalTaxRate || 0}%):</span>
-                        <span>{formData.currency === 'EUR' ? '€' : 'R$'} {((parseFloat(subtotal) * (parseFloat(generalTaxRate) || 0)) / 100).toFixed(2)}</span>
+                        <span>{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(((parseFloat(subtotal) * (parseFloat(generalTaxRate) || 0)) / 100))}</span>
                       </div>
                       <div className="border-t pt-2"></div>
                     </>
@@ -586,7 +586,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
                   <div className="flex justify-between items-center">
                     <span className="font-medium">Total Final:</span>
                     <span className="text-lg font-bold">
-                      {formData.currency === 'EUR' ? '€' : 'R$'} {calculateTotal().toFixed(2)}
+                      {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: formData.currency, minimumFractionDigits: 2 }).format(calculateTotal())}
                     </span>
                   </div>
                 </div>
@@ -609,15 +609,16 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
               
               <div className="space-y-2">
                 <Label htmlFor="currency">Moeda</Label>
-                {targetType === 'account' ? (
+        {targetType === 'account' ? (
                   <select
                     id="currency"
                     value={formData.currency}
                     onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as any }))}
                     className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    <option value="EUR">EUR (€)</option>
-                    <option value="BRL">BRL (R$)</option>
+          <option value="EUR">EUR (€)</option>
+          <option value="BRL">BRL (R$)</option>
+          <option value="USD">USD ($)</option>
                   </select>
                 ) : (
                   <div className="h-10 flex items-center px-3 rounded-md border bg-gray-50 text-sm">{formData.currency}</div>

@@ -10,6 +10,8 @@ import Link from 'next/link'
 import CurrencyDropdown from '@/components/CurrencyDropdown'
 import { useCurrency } from '@/contexts/CurrencyContext'
 
+type Currency = 'EUR' | 'BRL' | 'USD'
+
 interface FixedCost {
   id: string
   name: string
@@ -41,7 +43,8 @@ interface FixedCostEntry {
   fixed_cost: {
     name: string
     cost_type: string
-    provider: string | null
+  provider: string | null
+  currency?: string
   }
 }
 
@@ -167,7 +170,8 @@ export default function FixedCostsPage() {
           fixed_costs (
             name,
             cost_type,
-            provider
+            provider,
+            currency
           )
         `)
         .eq('user_id', user?.id)
@@ -351,13 +355,14 @@ export default function FixedCostsPage() {
     .reduce((sum, fc) => {
       const monthly = fc.billing_period === 'monthly' ? fc.amount : 
                      fc.billing_period === 'yearly' ? fc.amount / 12 : fc.amount * 4.33
-      return sum + convert(monthly, (fc.currency as 'EUR'|'BRL'), displayCurrency)
+      return sum + convert(monthly, (fc.currency as Currency), displayCurrency as Currency)
     }, 0)
 
   const totalActualMonth = currentMonthEntries
     .reduce((sum, entry) => {
       const amount = entry.actual_amount || entry.amount
-      return sum + amount
+      const fromCurrency = (entry.fixed_cost?.currency || 'EUR') as Currency
+      return sum + convert(amount, fromCurrency, displayCurrency as Currency)
     }, 0)
 
   const paidThisMonth = currentMonthEntries.filter(e => e.status === 'paid').length
@@ -462,7 +467,7 @@ export default function FixedCostsPage() {
                   <div>
                     <h3 className="text-lg font-medium text-gray-900">{t('fixedCosts.monthlyBudget')}</h3>
                     <p className="text-3xl font-bold text-blue-600">
-                      {displayCurrency === 'EUR' ? '€' : 'R$'}{totalMonthlyBudget.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                      {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(totalMonthlyBudget)}
                     </p>
                   </div>
                   <Calendar className="h-8 w-8 text-blue-600" />
@@ -474,7 +479,7 @@ export default function FixedCostsPage() {
                   <div>
                     <h3 className="text-lg font-medium text-gray-900">{t('fixedCosts.actualMonth')}</h3>
                     <p className="text-3xl font-bold text-green-600">
-                      {displayCurrency === 'EUR' ? '€' : 'R$'}{totalActualMonth.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                      {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(totalActualMonth)}
                     </p>
                   </div>
                   <CheckCircle className="h-8 w-8 text-green-600" />
@@ -512,6 +517,8 @@ export default function FixedCostsPage() {
                 <div className="divide-y divide-gray-200">
                   {currentMonthEntries.map((entry) => {
                     const IconComponent = COST_TYPE_ICONS[entry.fixed_cost.cost_type as keyof typeof COST_TYPE_ICONS] || DollarSign
+                    const entryCurrency = (entry.fixed_cost?.currency || 'EUR') as Currency
+                    const shownAmount = convert((entry.actual_amount || entry.amount), entryCurrency, displayCurrency as Currency)
                     return (
                       <div key={entry.id} className="p-4 flex items-center justify-between">
                         <div className="flex items-center space-x-4">
@@ -529,11 +536,11 @@ export default function FixedCostsPage() {
                         <div className="flex items-center space-x-4">
                           <div className="text-right">
                             <p className="font-semibold">
-                              €{(entry.actual_amount || entry.amount).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                              {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(shownAmount)}
                             </p>
                             {entry.actual_amount && entry.actual_amount !== entry.amount && (
                               <p className="text-sm text-gray-500">
-                                (orç: €{entry.amount.toLocaleString('pt-PT', { minimumFractionDigits: 2 })})
+                                ({t('fixedCosts.estimatedAmount')}: {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(convert(entry.amount, entryCurrency, displayCurrency as Currency))})
                               </p>
                             )}
                           </div>
@@ -587,7 +594,7 @@ export default function FixedCostsPage() {
                           <option value="">{t('fixedCosts.selectCost')}</option>
                           {fixedCosts.filter(fc => fc.is_active).map(fc => (
                             <option key={fc.id} value={fc.id}>
-                              {fc.name} - €{fc.estimated_amount || fc.amount}
+                              {fc.name} - {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: fc.currency as Currency, minimumFractionDigits: 2 }).format(fc.estimated_amount || fc.amount)}
                             </option>
                           ))}
                         </select>
@@ -720,7 +727,7 @@ export default function FixedCostsPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         {t('fixedCosts.type')}
@@ -765,6 +772,21 @@ export default function FixedCostsPage() {
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
                         placeholder="75.00"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('common.currency')}
+                      </label>
+                      <select
+                        value={formData.currency}
+                        onChange={(e) => setFormData(prev => ({ ...prev, currency: e.target.value as Currency }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                      >
+                        <option value="EUR">EUR (€)</option>
+                        <option value="BRL">BRL (R$)</option>
+                        <option value="USD">USD ($)</option>
+                      </select>
                     </div>
                   </div>
 
@@ -829,15 +851,19 @@ export default function FixedCostsPage() {
                           <div className="flex items-center space-x-4">
                             <div className="text-right">
                               <p className="text-lg font-semibold">
-                                €{fixedCost.amount.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                                {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: fixedCost.currency as Currency, minimumFractionDigits: 2 }).format(fixedCost.amount)}
                               </p>
                               {fixedCost.estimated_amount && (
                                 <p className="text-sm text-gray-500">
-                                  ~€{fixedCost.estimated_amount.toLocaleString('pt-PT', { minimumFractionDigits: 2 })}
+                                  ~{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: fixedCost.currency as Currency, minimumFractionDigits: 2 }).format(fixedCost.estimated_amount)}
                                 </p>
                               )}
                               <p className="text-sm text-gray-500">
-                                ≈ €{getMonthlyAmount(fixedCost.amount, fixedCost.billing_period).toLocaleString('pt-PT', { minimumFractionDigits: 2 })}/{t('fixedCosts.monthly')}
+                                {(() => {
+                                  const monthly = getMonthlyAmount(fixedCost.amount, fixedCost.billing_period)
+                                  const converted = convert(monthly, fixedCost.currency as Currency, displayCurrency as Currency)
+                                  return `≈ ${new Intl.NumberFormat('pt-PT', { style: 'currency', currency: displayCurrency as Currency, minimumFractionDigits: 2 }).format(converted)}/${t('fixedCosts.monthly')}`
+                                })()}
                               </p>
                             </div>
                             

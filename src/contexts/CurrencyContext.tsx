@@ -6,12 +6,16 @@ type Rates = {
   date: string
   eur_to_brl: number
   brl_to_eur: number
+  eur_to_usd?: number | null
+  usd_to_eur?: number | null
+  usd_to_brl?: number | null
+  brl_to_usd?: number | null
   fetched_at?: string | null
   stale?: boolean
   source?: string
 }
 
-type Currency = 'EUR' | 'BRL'
+type Currency = 'EUR' | 'BRL' | 'USD'
 
 type CurrencyContextType = {
   displayCurrency: Currency
@@ -48,6 +52,10 @@ export function CurrencyProvider({ children, defaultCurrency = 'EUR' as Currency
           date: j.date,
           eur_to_brl: Number(j.eur_to_brl),
           brl_to_eur: Number(j.brl_to_eur),
+          eur_to_usd: j.eur_to_usd != null ? Number(j.eur_to_usd) : null,
+          usd_to_eur: j.usd_to_eur != null ? Number(j.usd_to_eur) : (j.eur_to_usd ? 1/Number(j.eur_to_usd) : null),
+          usd_to_brl: j.usd_to_brl != null ? Number(j.usd_to_brl) : null,
+          brl_to_usd: j.brl_to_usd != null ? Number(j.brl_to_usd) : (j.usd_to_brl ? 1/Number(j.usd_to_brl) : null),
           fetched_at: j.fetched_at || null,
           stale: Boolean(j.stale),
           source: j.source
@@ -63,8 +71,24 @@ export function CurrencyProvider({ children, defaultCurrency = 'EUR' as Currency
   const convert = useMemo(() => (amount: number, from: Currency, to: Currency = displayCurrency) => {
     if (from === to) return amount
     if (!rates) return amount
-    if (from === 'EUR' && to === 'BRL') return amount * rates.eur_to_brl
-    if (from === 'BRL' && to === 'EUR') return amount * rates.brl_to_eur
+    // Helper to get pair or derive via cross
+    const getPair = (f: Currency, t: Currency): number | null => {
+      if (f === t) return 1
+      // Direct known pairs
+      if (f === 'EUR' && t === 'BRL') return rates.eur_to_brl
+      if (f === 'BRL' && t === 'EUR') return rates.brl_to_eur
+      if (f === 'EUR' && t === 'USD') return rates.eur_to_usd ?? (rates.usd_to_eur ? 1 / (rates.usd_to_eur as number) : null)
+      if (f === 'USD' && t === 'EUR') return rates.usd_to_eur ?? (rates.eur_to_usd ? 1 / (rates.eur_to_usd as number) : null)
+      if (f === 'USD' && t === 'BRL') return rates.usd_to_brl ?? ((rates.eur_to_brl && rates.eur_to_usd) ? (rates.eur_to_brl / (rates.eur_to_usd as number)) : null)
+      if (f === 'BRL' && t === 'USD') return rates.brl_to_usd ?? ((rates.usd_to_brl && (rates.usd_to_brl as number) > 0) ? 1 / (rates.usd_to_brl as number) : ((rates.brl_to_eur && rates.usd_to_eur) ? (rates.brl_to_eur * (rates.usd_to_eur as number)) : null))
+      return null
+    }
+    const pair = getPair(from, to)
+    if (pair && isFinite(pair)) return amount * pair
+    // Fallback: convert via EUR
+    const toEur = getPair(from, 'EUR')
+    const fromEur = getPair('EUR', to)
+    if (toEur && fromEur) return amount * toEur * fromEur
     return amount
   }, [rates, displayCurrency])
 

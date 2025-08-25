@@ -162,7 +162,14 @@ export function convertCurrency(
   amount: number,
   fromCurrency: SupportedCurrency,
   toCurrency: SupportedCurrency,
-  exchangeRates?: { eur_to_brl: number; brl_to_eur: number; usd_to_eur?: number }
+  exchangeRates?: { 
+    eur_to_brl: number; 
+    brl_to_eur: number; 
+    eur_to_usd?: number | null; 
+    usd_to_eur?: number | null; 
+    usd_to_brl?: number | null; 
+    brl_to_usd?: number | null; 
+  }
 ): number {
   if (fromCurrency === toCurrency) return amount
   if (!exchangeRates) return amount
@@ -173,6 +180,26 @@ export function convertCurrency(
   }
   if (fromCurrency === 'BRL' && toCurrency === 'EUR') {
     return amount * exchangeRates.brl_to_eur
+  }
+  if (fromCurrency === 'EUR' && toCurrency === 'USD') {
+    const rate = exchangeRates.eur_to_usd ?? (exchangeRates.usd_to_eur ? 1/(exchangeRates.usd_to_eur as number) : 1)
+    return amount * rate
+  }
+  if (fromCurrency === 'USD' && toCurrency === 'EUR') {
+    const rate = exchangeRates.usd_to_eur ?? (exchangeRates.eur_to_usd ? 1/(exchangeRates.eur_to_usd as number) : 1)
+    return amount * rate
+  }
+  if (fromCurrency === 'USD' && toCurrency === 'BRL') {
+    const direct = exchangeRates.usd_to_brl
+    const via = (exchangeRates.eur_to_brl && exchangeRates.eur_to_usd) ? (exchangeRates.eur_to_brl / (exchangeRates.eur_to_usd as number)) : null
+    const rate = direct ?? via ?? 1
+    return amount * rate
+  }
+  if (fromCurrency === 'BRL' && toCurrency === 'USD') {
+    const direct = exchangeRates.brl_to_usd ?? (exchangeRates.usd_to_brl ? 1/(exchangeRates.usd_to_brl as number) : null)
+    const via = (exchangeRates.brl_to_eur && exchangeRates.usd_to_eur) ? (exchangeRates.brl_to_eur * (exchangeRates.usd_to_eur as number)) : null
+    const rate = direct ?? via ?? 1
+    return amount * rate
   }
 
   // Adicionar mais conversões conforme necessário

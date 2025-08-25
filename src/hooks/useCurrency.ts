@@ -37,7 +37,8 @@ export function useCurrency() {
     if (fromCurrency === toCurrency) return amount
     
     // Usar o sistema de conversão existente do contexto
-    return convertExchange(amount, fromCurrency as 'EUR' | 'BRL', toCurrency as 'EUR' | 'BRL')
+    // Context convert supports EUR/BRL/USD now; cast to include USD
+    return convertExchange(amount, fromCurrency as any, toCurrency as any)
   }, [convertExchange, defaultCurrency])
 
   // Função de formatação com conversão automática

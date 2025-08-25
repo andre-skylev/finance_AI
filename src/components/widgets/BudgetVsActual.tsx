@@ -9,7 +9,7 @@ import { BarChart3 } from 'lucide-react';
 
 export function BudgetVsActual() {
   const { t } = useLanguage();
-  const { displayCurrency, formatWithConversion } = useCurrency();
+  const { displayCurrency, format, formatNumeric } = useCurrency();
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -17,7 +17,7 @@ export function BudgetVsActual() {
     let cancelled = false;
     const load = async () => {
       try {
-        const res = await fetch('/api/dashboard?type=budget-vs-actual');
+        const res = await fetch(`/api/dashboard?type=budget-vs-actual&currency=${displayCurrency}`);
         if (!res.ok) {
           // If unauthorized or not found, just return empty data without throwing error
           if (res.status === 401 || res.status === 404) {
@@ -37,7 +37,7 @@ export function BudgetVsActual() {
     };
     load();
     return () => { cancelled = true; };
-  }, []);
+  }, [displayCurrency]);
 
   if (loading) {
     return (
@@ -100,7 +100,7 @@ export function BudgetVsActual() {
             <YAxis 
               stroke="hsl(var(--foreground))" 
               fontSize={12}
-              tickFormatter={(value) => formatWithConversion(value, 'EUR').replace(/[€R\$\s]/g, '')}
+              tickFormatter={(value) => formatNumeric(value)}
             />
             <Tooltip
               contentStyle={{
@@ -113,8 +113,7 @@ export function BudgetVsActual() {
                   budgeted: t('dashboard.budgeted'),
                   actual: t('dashboard.actual')
                 };
-                const s = displayCurrency === 'EUR' ? '€' : 'R$'
-                return [formatWithConversion(value, 'EUR'), labels[name] || name];
+                return [format(value), labels[name] || name];
               }}
             />
             <Bar 
@@ -150,7 +149,7 @@ export function BudgetVsActual() {
                     {item.variance > 0 ? '+' : ''}{item.variance.toFixed(1)}%
                   </span>
                   <span className="text-xs text-muted-foreground">
-                    ({formatWithConversion(Math.abs(item.actual - item.budgeted), 'EUR')})
+                    ({format(Math.abs(item.actual - item.budgeted))})
                   </span>
                 </div>
               </div>

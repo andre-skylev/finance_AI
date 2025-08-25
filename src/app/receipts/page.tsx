@@ -1,7 +1,7 @@
 "use client"
 
 import React from 'react'
-import { Receipt } from 'lucide-react'
+import { Receipt, Trash2 } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useCurrency } from '@/hooks/useCurrency'
 
@@ -45,9 +45,9 @@ function ReceiptsList() {
 
   React.useEffect(() => {
     let cancelled = false
-    const load = async () => {
+  const load = async () => {
       try {
-        const res = await fetch('/api/receipts')
+    const res = await fetch('/api/receipts/with-sources')
         const j = await res.json()
         if (!res.ok) throw new Error(j.error || t('receipts.errors.loadFailed'))
         if (!cancelled) setReceipts(j.receipts || [])
@@ -154,39 +154,44 @@ function ReceiptsList() {
         {receipts.map((r) => (
           <div 
             key={r.id} 
-            className="px-4 sm:px-8 py-4 sm:py-5 hover:bg-gray-50/50 transition-colors cursor-pointer"
-            onClick={() => handleReceiptClick(r)}
+            className="px-4 sm:px-8 py-4 sm:py-5 hover:bg-gray-50/50 transition-colors"
           >
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-1">
+            <div className="flex items-start justify-between gap-3">
+              <button className="flex-1 text-left" onClick={() => handleReceiptClick(r)}>
+                <div className="flex items-center gap-2 mb-1">
                   <h3 className="font-medium text-gray-900 text-sm truncate">
                     {r.merchant_name || t('receipts.unknownMerchant')}
                   </h3>
-                  <span className="text-xs text-gray-400">
-                    {r.receipt_date ? new Date(r.receipt_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { 
-                      month: 'short', 
-                      day: 'numeric',
-                      year: 'numeric'
-                    }) : '—'}
-                  </span>
+                  {r.source && (
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium ${r.source.type==='bank' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'}`}>
+                      {r.source.institution}
+                    </span>
+                  )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-500">
+                  <span>
+                    {r.receipt_date ? new Date(r.receipt_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
+                  </span>
                   {typeof r.subtotal === 'number' && (
-                    <span>{t('receipts.subtotal')} {formatBalance(r.subtotal, 'EUR')}</span>
+                    <span>{t('receipts.subtotal')} {formatBalance(r.subtotal, r.currency || 'EUR')}</span>
                   )}
                   {typeof r.tax === 'number' && r.tax > 0 && (
-                    <span>{t('receipts.tax')} {formatBalance(r.tax, 'EUR')}</span>
+                    <span>{t('receipts.tax')} {formatBalance(r.tax, r.currency || 'EUR')}</span>
                   )}
                 </div>
-              </div>
-              <div className="text-right ml-4">
+              </button>
+              <div className="text-right ml-2 min-w-[96px] flex flex-col items-end">
                 <div className="text-sm sm:text-base font-semibold text-gray-900">
-                  {formatBalance(r.total, 'EUR')}
+                  {formatBalance(r.total, r.currency || 'EUR')}
                 </div>
-                <div className="text-xs text-gray-500 mt-1">
-                  Ver detalhes →
-                </div>
+                <button
+                  aria-label="delete"
+                  onClick={() => handleDeleteReceipt(r.id)}
+                  className="mt-2 inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  {t('common.delete')}
+                </button>
               </div>
             </div>
           </div>
@@ -233,15 +238,15 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
   })
 
   React.useEffect(() => {
-    const loadDetails = async () => {
+  const loadDetails = async () => {
       try {
         setLoading(true)
         // Load receipt items
-        const itemsRes = await fetch(`/api/receipts/${receipt.id}/items`)
+    const itemsRes = await fetch(`/api/receipts/${receipt.id}/items`)
         const itemsData = await itemsRes.json()
         
         // Load related transactions
-        const transactionsRes = await fetch(`/api/receipts/${receipt.id}/transactions`)
+    const transactionsRes = await fetch(`/api/receipts/${receipt.id}/transactions`)
         const transactionsData = await transactionsRes.json()
         
         if (itemsRes.ok) setItems(itemsData.items || [])
@@ -378,15 +383,15 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
                   </div>
                   <div>
                     <span className="text-gray-500">{t('receipts.subtotal')}</span>
-                    <div className="font-medium">{formatBalance(receipt.subtotal, 'EUR')}</div>
+                    <div className="font-medium">{formatBalance(receipt.subtotal, receipt.currency || 'EUR')}</div>
                   </div>
                   <div>
                     <span className="text-gray-500">{t('receipts.tax')}</span>
-                    <div className="font-medium">{formatBalance(receipt.tax, 'EUR')}</div>
+                    <div className="font-medium">{formatBalance(receipt.tax, receipt.currency || 'EUR')}</div>
                   </div>
                   <div className="col-span-2">
                     <span className="text-gray-500">{t('receipts.total')}</span>
-                    <div className="font-semibold text-lg">{formatBalance(receipt.total, 'EUR')}</div>
+                    <div className="font-semibold text-lg">{formatBalance(receipt.total, receipt.currency || 'EUR')}</div>
                   </div>
                 </div>
               </div>
@@ -411,8 +416,8 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
                           <tr key={index} className="border-b border-gray-100">
                             <td className="py-2">{item.description}</td>
                             <td className="py-2 text-right">{item.quantity || '—'}</td>
-                            <td className="py-2 text-right">{formatBalance(item.unit_price, 'EUR')}</td>
-                            <td className="py-2 text-right font-medium">{formatBalance(item.total, 'EUR')}</td>
+                            <td className="py-2 text-right">{formatBalance(item.unit_price, receipt.currency || 'EUR')}</td>
+                            <td className="py-2 text-right font-medium">{formatBalance(item.total, receipt.currency || 'EUR')}</td>
                             <td className="py-2 text-center">
                               <button
                                 onClick={() => setEditingItem(item)}
@@ -449,7 +454,7 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className={`font-semibold ${signed >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatBalance(signed, 'EUR')}
+                            {formatBalance(signed, receipt.currency || 'EUR')}
                           </span>
                           <button
                             onClick={() => handleEditTransaction(transaction)}

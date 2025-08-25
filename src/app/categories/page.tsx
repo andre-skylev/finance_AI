@@ -9,7 +9,7 @@ import { translateCategoryName } from '@/lib/categories'
 
 export default function CategoriesPage() {
   const { t } = useLanguage()
-  const { categories, createCategory, refetch } = useCategories()
+  const { categories, createCategory, updateCategory, deleteCategory, refetch } = useCategories() as any
   const [newCategory, setNewCategory] = useState({
     name: '',
     type: 'expense' as 'expense' | 'income',
@@ -18,6 +18,7 @@ export default function CategoriesPage() {
     parent_id: '' as string | ''
   })
   const [busy, setBusy] = useState(false)
+  const [editing, setEditing] = useState<Record<string, any>>({})
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
 
   // Build parent -> children map
@@ -39,16 +40,27 @@ export default function CategoriesPage() {
 
   const toggle = (id: string) => setExpanded(prev => ({ ...prev, [id]: !prev[id] }))
 
-  const deleteCategory = async (id: string) => {
+  const onDelete = async (id: string) => {
     if (!confirm(t('categoriesPage.deleteConfirm'))) return
     setBusy(true)
     try {
-      const res = await fetch(`/api/categories?id=${id}`, { method: 'DELETE' })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error || 'Delete failed')
-      }
-      await refetch()
+      await deleteCategory(id)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const onStartEdit = (c: any) => setEditing((prev:any)=>({ ...prev, [c.id]: { name: c.name, type: c.type, color: c.color, parent_id: c.parent_id || '' } }))
+  const onCancelEdit = (id: string) => setEditing((prev:any)=>{ const n={...prev}; delete n[id]; return n })
+  const onSaveEdit = async (id: string) => {
+    const draft = editing[id]
+    if (!draft) return
+    setBusy(true)
+    try {
+      await updateCategory(id, { name: draft.name, type: draft.type, color: draft.color, parent_id: draft.parent_id || null })
+      onCancelEdit(id)
     } catch (e) {
       console.error(e)
     } finally {
@@ -89,32 +101,87 @@ export default function CategoriesPage() {
 
               {expanded[p.id] && (
                 <div className="px-4 pb-3">
-                  {(childrenByParent[p.id] || []).map((c: any) => (
-                    <div key={c.id} className="flex items-center justify-between p-2 pl-6 border-t border-gray-100">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: c.color }} />
-                        <span className="text-sm">{translateCategoryName(c.name, !!c.is_default, t)}</span>
-                        {c.is_default && (
-                          <span className="ml-1 text-[10px] uppercase text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{t('categoriesPage.default')}</span>
-                        )}
+                  {(childrenByParent[p.id] || []).map((c: any) => {
+                    const isEditing = !!editing[c.id]
+                    const draft = editing[c.id] || {}
+                    return (
+                      <div key={c.id} className="flex items-center justify-between p-2 pl-6 border-t border-gray-100">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: isEditing ? draft.color : c.color }} />
+                          {isEditing ? (
+                            <>
+                              <input
+                                className="px-2 py-1 border rounded text-sm"
+                                value={draft.name}
+                                onChange={(e)=>setEditing((prev:any)=>({ ...prev, [c.id]: { ...prev[c.id], name: e.target.value } }))}
+                                style={{ width: 160 }}
+                              />
+                              <select
+                                className="px-2 py-1 border rounded text-sm"
+                                value={draft.type}
+                                onChange={(e)=>setEditing((prev:any)=>({ ...prev, [c.id]: { ...prev[c.id], type: e.target.value } }))}
+                              >
+                                <option value="expense">{t('categoriesPage.expense')}</option>
+                                <option value="income">{t('categoriesPage.income')}</option>
+                              </select>
+                              <input
+                                type="color"
+                                className="h-7 w-10 border rounded"
+                                value={draft.color}
+                                onChange={(e)=>setEditing((prev:any)=>({ ...prev, [c.id]: { ...prev[c.id], color: e.target.value } }))}
+                              />
+                              <select
+                                className="px-2 py-1 border rounded text-sm"
+                                value={draft.parent_id}
+                                onChange={(e)=>setEditing((prev:any)=>({ ...prev, [c.id]: { ...prev[c.id], parent_id: e.target.value } }))}
+                              >
+                                <option value="">{t('categoriesPage.noParent')}</option>
+                                {parents
+                                  .filter((pp: any) => pp.type === draft.type && pp.id !== c.id)
+                                  .map((pp: any) => (
+                                    <option key={pp.id} value={pp.id}>{translateCategoryName(pp.name, !!pp.is_default, t)}</option>
+                                  ))}
+                              </select>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-sm">{translateCategoryName(c.name, !!c.is_default, t)}</span>
+                              {c.is_default && (
+                                <span className="ml-1 text-[10px] uppercase text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">{t('categoriesPage.default')}</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {!isEditing && (
+                            <span className="text-xs uppercase text-gray-500">
+                              {c.type === 'expense' ? t('categoriesPage.expense') : t('categoriesPage.income')}
+                            </span>
+                          )}
+                          {!c.is_default && (
+                            isEditing ? (
+                              <div className="flex items-center gap-2">
+                                <button onClick={()=>onSaveEdit(c.id)} disabled={busy} className="px-2 py-1 text-white bg-primary rounded text-xs">{t('common.save') || 'Save'}</button>
+                                <button onClick={()=>onCancelEdit(c.id)} disabled={busy} className="px-2 py-1 border rounded text-xs">{t('common.cancel') || 'Cancel'}</button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2">
+                                <button onClick={()=>onStartEdit(c)} disabled={busy} className="px-2 py-1 border rounded text-xs">{t('common.edit') || 'Edit'}</button>
+                                <button
+                                  onClick={() => onDelete(c.id)}
+                                  disabled={busy}
+                                  className="p-2 text-gray-400 hover:text-red-600 transition-colors"
+                                  title={t('categoriesPage.delete')}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                            )
+                          )}
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs uppercase text-gray-500">
-                          {c.type === 'expense' ? t('categoriesPage.expense') : t('categoriesPage.income')}
-                        </span>
-                        {!c.is_default && (
-                          <button
-                            onClick={() => deleteCategory(c.id)}
-                            disabled={busy}
-                            className="p-2 text-gray-400 hover:text-red-600 transition-colors"
-                            title={t('categoriesPage.delete')}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
             </div>
