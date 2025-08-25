@@ -49,7 +49,7 @@ export function NetWorth() {
               </linearGradient>
             </defs>
             <XAxis dataKey="name" stroke="hsl(var(--foreground))" />
-              <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => formatNumeric(v)} />
+              <YAxis stroke="hsl(var(--foreground))" tickFormatter={(v) => formatNumeric(v)} domain={["dataMin", "dataMax"]} />
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
             <Tooltip
               contentStyle={{
@@ -58,7 +58,7 @@ export function NetWorth() {
               }}
               formatter={(value: number) => [format(Number(value)), t('dashboard.netWorth')]}
             />
-            <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorValue)" />
+            <Area type="monotone" dataKey="value" stroke="hsl(var(--primary))" baseValue="dataMin" fillOpacity={1} fill="url(#colorValue)" />
           </AreaChart>
         </ResponsiveContainer>
         )}

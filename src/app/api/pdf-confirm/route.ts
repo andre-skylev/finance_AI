@@ -417,10 +417,12 @@ export async function POST(request: NextRequest) {
         }
       }
 
-  // Preparar transações de cartão (uso positivo; distinguir compra/pagamento pelo sinal)
+  // Preparar transações de cartão (distinguir compra/pagamento pelo sinal)
       const toInsert = transactions.map((tx: any) => {
         const amtNum = Number(tx.amount)
-        const isPurchase = amtNum >= 0
+        // Para cartões, montantes negativos geralmente representam compras (débito)
+        // e montantes positivos representam pagamentos/estornos (crédito)
+        const isPurchase = amtNum <= 0
         const cardCurrency = (card.currency || 'EUR').toUpperCase()
         const convertedAbs = convertAmount(Math.abs(amtNum), sourceCurrency, cardCurrency)
         return {

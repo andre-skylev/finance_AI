@@ -8,9 +8,12 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { CreditCard, CalendarDays, TrendingUp, DollarSign, Clock } from 'lucide-react'
+import { CreditCard, CalendarDays, TrendingUp, DollarSign, Clock, Plus } from 'lucide-react'
 import { useCurrency } from '@/contexts/CurrencyContext'
 import CurrencyDropdown from '@/components/CurrencyDropdown'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 
 type Currency = 'EUR'|'BRL'|'USD'
 
@@ -52,10 +55,38 @@ export default function InstallmentsPage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all')
   const { displayCurrency, convert } = useCurrency()
+  const [open, setOpen] = useState(false)
+  const [cards, setCards] = useState<any[]>([])
+  const [form, setForm] = useState({
+    source_type: 'credit_card' as 'credit_card'|'direct_debit'|'financing',
+    credit_card_id: '',
+    account_id: '',
+    merchant_name: '',
+    original_amount: '',
+    total_installments: 2,
+    first_payment_date: new Date().toISOString().slice(0,10),
+    currency: 'EUR' as Currency,
+    tan_rate: '',
+    description: ''
+  })
+  const [accounts, setAccounts] = useState<any[]>([])
 
   useEffect(() => {
     if (user) {
       fetchInstallments()
+      ;(async()=>{
+        const { data } = await supabase
+          .from('credit_cards')
+          .select('id, card_name, bank_name')
+          .eq('user_id', user.id)
+        setCards(data||[])
+        const { data: accs } = await supabase
+          .from('accounts')
+          .select('id, name, bank_name')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+        setAccounts(accs||[])
+      })()
     }
   }, [user])
 
@@ -180,7 +211,10 @@ export default function InstallmentsPage() {
             <h1 className="text-2xl font-bold text-gray-900">Parcelamentos</h1>
             <p className="text-gray-600">Gerencie suas compras parceladas</p>
           </div>
-          <CurrencyDropdown />
+          <div className="flex items-center gap-2">
+            <CurrencyDropdown />
+            <Button onClick={()=>setOpen(true)} size="sm" className="inline-flex items-center gap-2"><Plus className="h-4 w-4"/>Adicionar</Button>
+          </div>
         </div>
 
         {/* Stats Cards */}
@@ -362,6 +396,103 @@ export default function InstallmentsPage() {
           </Card>
         )}
       </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Novo parcelamento</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="text-sm">Origem</label>
+              <select className="w-full border rounded px-2 py-2" value={form.source_type} onChange={(e)=>setForm(f=>({...f, source_type:e.target.value as any}))}>
+                <option value="credit_card">Cartão de crédito</option>
+                <option value="direct_debit">Débito direto</option>
+                <option value="financing">Financiamento</option>
+              </select>
+            </div>
+            {form.source_type==='credit_card' && (
+              <div className="sm:col-span-2">
+                <label className="text-sm">Cartão</label>
+                <select className="w-full border rounded px-2 py-2" value={form.credit_card_id} onChange={(e)=>setForm(f=>({...f, credit_card_id:e.target.value}))}>
+                  <option value="">Selecione</option>
+                  {cards.map((c:any)=>(
+                    <option key={c.id} value={c.id}>{c.bank_name} {c.card_name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {form.source_type!=='credit_card' && (
+              <div className="sm:col-span-2">
+                <label className="text-sm">Conta debitada</label>
+                <select className="w-full border rounded px-2 py-2" value={form.account_id} onChange={(e)=>setForm(f=>({...f, account_id:e.target.value}))}>
+                  <option value="">Selecione</option>
+                  {accounts.map((a:any)=>(
+                    <option key={a.id} value={a.id}>{a.bank_name? a.bank_name+' ' : ''}{a.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="text-sm">Estabelecimento</label>
+              <Input value={form.merchant_name} onChange={(e)=>setForm(f=>({...f, merchant_name:e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-sm">Valor total</label>
+              <Input type="number" value={form.original_amount} onChange={(e)=>setForm(f=>({...f, original_amount:e.target.value}))} />
+            </div>
+            <div>
+              <label className="text-sm">Prestações</label>
+              <Input type="number" min={1} value={form.total_installments} onChange={(e)=>setForm(f=>({...f, total_installments:Number(e.target.value)||1}))} />
+            </div>
+            <div>
+              <label className="text-sm">1ª data</label>
+              <Input type="date" value={form.first_payment_date} onChange={(e)=>setForm(f=>({...f, first_payment_date:e.target.value}))} />
+            </div>
+            {form.source_type!=='credit_card' && (
+              <div>
+                <label className="text-sm">Moeda</label>
+                <select className="w-full border rounded px-2 py-2" value={form.currency} onChange={(e)=>setForm(f=>({...f, currency:e.target.value as any}))}>
+                  <option value="EUR">EUR</option>
+                  <option value="BRL">BRL</option>
+                  <option value="USD">USD</option>
+                </select>
+              </div>
+            )}
+            <div>
+              <label className="text-sm">TAN (%)</label>
+              <Input type="number" step="0.01" value={form.tan_rate} onChange={(e)=>setForm(f=>({...f, tan_rate:e.target.value}))} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="text-sm">Descrição</label>
+              <Input value={form.description} onChange={(e)=>setForm(f=>({...f, description:e.target.value}))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="secondary" onClick={()=>setOpen(false)}>Cancelar</Button>
+            <Button onClick={async()=>{
+              const payload:any={
+                source_type: form.source_type,
+                credit_card_id: form.source_type==='credit_card'? form.credit_card_id : undefined,
+                account_id: form.source_type!=='credit_card'? form.account_id : undefined,
+                merchant_name: form.merchant_name,
+                original_amount: Number(form.original_amount||0),
+                total_installments: Number(form.total_installments||1),
+                first_payment_date: form.first_payment_date,
+                currency: form.source_type==='credit_card'? undefined : form.currency,
+                tan_rate: form.tan_rate? Number(form.tan_rate) : undefined,
+                description: form.description||undefined
+              }
+              try{
+                const res = await fetch('/api/installments',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
+                if(!res.ok){ const j=await res.json().catch(()=>({})); throw new Error(j.error||`HTTP ${res.status}`)}
+                setOpen(false)
+                setForm({ source_type:'credit_card', credit_card_id:'', account_id:'', merchant_name:'', original_amount:'', total_installments:2, first_payment_date:new Date().toISOString().slice(0,10), currency:'EUR', tan_rate:'', description:'' })
+                await fetchInstallments()
+              }catch(e){ console.error(e) }
+            }}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </ProtectedRoute>
   )
 }
