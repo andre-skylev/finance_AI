@@ -332,6 +332,9 @@ export default function FixedCostsPage() {
     switch (period) {
       case 'weekly': return t('periods.weekly')
       case 'monthly': return t('periods.monthly')
+  case 'bimonthly': return t('periods.bimonthly') || 'Bimonthly'
+  case 'quarterly': return t('periods.quarterly') || 'Quarterly'
+  case 'semiannual': return t('periods.semiannual') || 'Semiannual'
       case 'yearly': return t('periods.yearly')
       default: return period
     }
@@ -353,8 +356,23 @@ export default function FixedCostsPage() {
   const totalMonthlyBudget = fixedCosts
     .filter(fc => fc.is_active)
     .reduce((sum, fc) => {
-      const monthly = fc.billing_period === 'monthly' ? fc.amount : 
-                     fc.billing_period === 'yearly' ? fc.amount / 12 : fc.amount * 4.33
+      let monthly: number
+      switch (fc.billing_period) {
+        case 'weekly':
+          monthly = fc.amount * 4.33; break
+        case 'monthly':
+          monthly = fc.amount; break
+        case 'bimonthly':
+          monthly = fc.amount / 2; break
+        case 'quarterly':
+          monthly = fc.amount / 3; break
+        case 'semiannual':
+          monthly = fc.amount / 6; break
+        case 'yearly':
+          monthly = fc.amount / 12; break
+        default:
+          monthly = fc.amount; break
+      }
       return sum + convert(monthly, (fc.currency as Currency), displayCurrency as Currency)
     }, 0)
 
@@ -413,6 +431,9 @@ export default function FixedCostsPage() {
     switch (period) {
       case 'weekly': return amount * 4.33
       case 'monthly': return amount
+      case 'bimonthly': return amount / 2
+      case 'quarterly': return amount / 3
+      case 'semiannual': return amount / 6
       case 'yearly': return amount / 12
       default: return amount
     }
@@ -790,6 +811,52 @@ export default function FixedCostsPage() {
                     </div>
                   </div>
 
+                  {/* Period and scheduling */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('fixedCosts.billingPeriod') || 'Billing period'}
+                      </label>
+                      <select
+                        value={formData.billing_period}
+                        onChange={(e) => setFormData(prev => ({ ...prev, billing_period: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                      >
+                        <option value="weekly">{getPeriodLabel('weekly')}</option>
+                        <option value="monthly">{getPeriodLabel('monthly')}</option>
+                        <option value="bimonthly">{getPeriodLabel('bimonthly')}</option>
+                        <option value="quarterly">{getPeriodLabel('quarterly')}</option>
+                        <option value="semiannual">{getPeriodLabel('semiannual')}</option>
+                        <option value="yearly">{getPeriodLabel('yearly')}</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('fixedCosts.startDate') || 'Start date'}
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.start_date}
+                        onChange={(e) => setFormData(prev => ({ ...prev, start_date: e.target.value }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        {t('fixedCosts.dueDay') || 'Due day'}
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={31}
+                        value={(formData.due_day as any) || ''}
+                        onChange={(e) => setFormData(prev => ({ ...prev, due_day: (e.target.value ? Number(e.target.value) : '' as any) }))}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-primary focus:border-primary"
+                        placeholder="1"
+                      />
+                    </div>
+                  </div>
+
                   <div className="flex items-center space-x-4">
                     <label className="flex items-center">
                       <input
@@ -826,12 +893,12 @@ export default function FixedCostsPage() {
               {fixedCosts.length > 0 ? (
                 <div className="divide-y divide-gray-200">
                   {fixedCosts.map((fixedCost) => {
-                    const IconComponent = COST_TYPE_ICONS[fixedCost.cost_type] || DollarSign
+                    const IconComponent = COST_TYPE_ICONS[fixedCost.cost_type as keyof typeof COST_TYPE_ICONS] || DollarSign
                     return (
                       <div key={fixedCost.id} className={`p-6 ${!fixedCost.is_active ? 'opacity-50' : ''}`}>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center space-x-4">
-                            <div className={`p-3 rounded-lg ${COST_TYPE_COLORS[fixedCost.cost_type]}`}>
+                            <div className={`p-3 rounded-lg ${COST_TYPE_COLORS[fixedCost.cost_type as keyof typeof COST_TYPE_COLORS]}`}>
                               <IconComponent className="h-6 w-6" />
                             </div>
                             <div>
