@@ -77,6 +77,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		date: language === 'pt' ? 'Data' : 'Date',
 		desc: language === 'pt' ? 'Descrição' : 'Description',
 		merchant: language === 'pt' ? 'Estabelecimento' : 'Merchant',
+		category: language === 'pt' ? 'Categoria' : 'Category',
 		amount: language === 'pt' ? 'Valor' : 'Amount',
 		type: language === 'pt' ? 'Tipo' : 'Type',
 		purchase: language === 'pt' ? 'Compra' : 'Purchase',
@@ -324,6 +325,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 									<th className="py-2 px-3">{t.merchant}</th>
 									<th className="py-2 px-3">{t.desc}</th>
 									<th className="py-2 px-3 text-right">{t.amount}</th>
+									<th className="py-2 px-3">{t.category}</th>
 									<th className="py-2 px-3">{t.type}</th>
 									<th className="py-2 px-3"></th>
 								</tr>
@@ -337,6 +339,7 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 										<td className={`py-2 px-3 text-right font-medium ${m.transaction_type === 'purchase' ? 'text-red-600' : 'text-green-600'}`}>
 											{formatCurrency(Math.abs(m.amount), card?.currency || m.currency)}
 										</td>
+										<td className="py-2 px-3">{m.category_id ? (categories.find((c: any) => c.id === m.category_id)?.name || '-') : '-'}</td>
 										<td className="py-2 px-3">{m.transaction_type === 'purchase' ? t.purchase : t.payment}</td>
 										<td className="py-2 px-3 text-right">
 											<div className="flex justify-end gap-2">
