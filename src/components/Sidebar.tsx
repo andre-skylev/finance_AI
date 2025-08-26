@@ -2,75 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-// Grouped navigation with clear sections
-import {
-  LayoutDashboard,
-  ArrowLeftRight,
-  Target,
-  Calendar,
-  Settings,
-  LogOut,
-  CreditCard,
-  ListOrdered,
-  FileText,
-  ReceiptText,
-  Wallet,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { LogOut, Target } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 import { LanguageSelector } from "@/components/LanguageSelector";
 import { useLanguage } from "@/contexts/LanguageContext";
-
-type NavItem = { href: string; icon: any; label: string };
-type NavGroup = { title: string; items: NavItem[] };
-
-function useNavGroups(): NavGroup[] {
-  const { t } = useLanguage();
-  return [
-    {
-      title: t("navGroup.overview") || "Visão geral",
-      items: [
-        { href: "/dashboard", icon: LayoutDashboard, label: t("navigation.dashboard") },
-      ],
-    },
-    {
-      title: t("navGroup.accounts") || "Contas",
-      items: [
-        { href: "/accounts", icon: Wallet, label: t("settings.accounts") },
-        { href: "/credit-cards", icon: CreditCard, label: t("navigation.creditCards") },
-      ],
-    },
-    {
-      title: t("navGroup.operations") || "Operações",
-      items: [
-        { href: "/transactions", icon: ArrowLeftRight, label: t("navigation.transactions") },
-        { href: "/installments", icon: ListOrdered, label: t("navigation.installments") },
-        { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
-      ],
-    },
-    {
-      title: t("navGroup.documents") || "Documentos",
-      items: [
-        { href: "/receipts", icon: ReceiptText, label: t("navigation.receipts") || "Recibos" },
-      ],
-    },
-    {
-      title: t("navGroup.planning") || "Planejamento",
-      items: [
-        { href: "/goals", icon: Target, label: t("navigation.goals") },
-        { href: "/fixed-costs", icon: Calendar, label: t("navigation.fixedCosts") },
-  { href: "/budgets", icon: Calendar, label: t("navigation.budgets") || 'Orçamentos' },
-  { href: "/fixed-incomes", icon: Calendar, label: t("navigation.fixedIncomes") },
-      ],
-    },
-    {
-      title: t("navGroup.settings") || "Configurações",
-      items: [
-        { href: "/settings", icon: Settings, label: t("navigation.settings") },
-      ],
-    },
-  ];
-}
+import { useNavGroups } from "@/components/navConfig";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -97,6 +33,7 @@ export function Sidebar() {
                 <div className="grid items-start">
                   {group.items.map((item) => {
                     const isActive = pathname === item.href;
+                    const Icon = item.icon;
                     return (
                       <Link
                         key={item.href}
@@ -105,7 +42,7 @@ export function Sidebar() {
                           isActive ? "bg-muted text-primary" : ""
                         }`}
                       >
-                        <item.icon className="h-4 w-4" />
+                        <Icon className="h-4 w-4" />
                         {item.label}
                       </Link>
                     );
@@ -117,13 +54,11 @@ export function Sidebar() {
         </div>
         <div className="mt-auto p-4">
           <div className="flex items-center justify-between gap-2">
-            {/* Language selector on the left */}
             <LanguageSelector />
-            {/* Compact logout icon on the right */}
             <button
               onClick={signOut}
-              title={t('navigation.logout')}
-              aria-label={t('navigation.logout')}
+              title={t("navigation.logout")}
+              aria-label={t("navigation.logout")}
               className="inline-flex items-center justify-center rounded-md p-2 text-red-600 hover:text-red-700 hover:bg-red-50 transition-colors"
             >
               <LogOut className="h-4 w-4" />

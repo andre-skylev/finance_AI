@@ -231,13 +231,13 @@ export default function CreditCardsPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
+    <div className="p-4 sm:p-6 space-y-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">{t('creditCardsPage.title')}</h1>
           <p className="text-gray-600">{t('creditCardsPage.subtitle')}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button
             variant="outline"
             onClick={() => setShowBalances(!showBalances)}
@@ -408,7 +408,7 @@ export default function CreditCardsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+  <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {creditCards.map((card) => (
             <Card key={card.id} className={`relative ${!card.is_active ? 'opacity-60' : ''}`}>
               <CardHeader className="pb-2">

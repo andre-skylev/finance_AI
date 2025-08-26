@@ -323,24 +323,24 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 								<tr className="border-b border-gray-200 text-left">
 									<th className="py-2 px-3">{t.date}</th>
 									<th className="py-2 px-3">{t.merchant}</th>
-									<th className="py-2 px-3">{t.desc}</th>
+									<th className="py-2 px-3 hidden sm:table-cell">{t.desc}</th>
 									<th className="py-2 px-3 text-right">{t.amount}</th>
-									<th className="py-2 px-3">{t.category}</th>
-									<th className="py-2 px-3">{t.type}</th>
+									<th className="py-2 px-3 hidden sm:table-cell">{t.category}</th>
+									<th className="py-2 px-3 hidden sm:table-cell">{t.type}</th>
 									<th className="py-2 px-3"></th>
 								</tr>
 							</thead>
 							<tbody>
 								{movements.map((m) => (
 									<tr key={m.id} className="border-b border-gray-100">
-										<td className="py-2 px-3">{new Date(m.transaction_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US')}</td>
-										<td className="py-2 px-3">{m.merchant_name || '-'}</td>
-										<td className="py-2 px-3">{m.description || '-'}</td>
+										<td className="py-2 px-3 whitespace-nowrap">{new Date(m.transaction_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US')}</td>
+										<td className="py-2 px-3 max-w-[160px] truncate">{m.merchant_name || '-'}</td>
+										<td className="py-2 px-3 hidden sm:table-cell">{m.description || '-'}</td>
 										<td className={`py-2 px-3 text-right font-medium ${m.transaction_type === 'purchase' ? 'text-red-600' : 'text-green-600'}`}>
 											{formatCurrency(Math.abs(m.amount), card?.currency || m.currency)}
 										</td>
-										<td className="py-2 px-3">{m.category_id ? (categories.find((c: any) => c.id === m.category_id)?.name || '-') : '-'}</td>
-										<td className="py-2 px-3">{m.transaction_type === 'purchase' ? t.purchase : t.payment}</td>
+										<td className="py-2 px-3 hidden sm:table-cell">{m.category_id ? (categories.find((c: any) => c.id === m.category_id)?.name || '-') : '-'}</td>
+										<td className="py-2 px-3 hidden sm:table-cell">{m.transaction_type === 'purchase' ? t.purchase : t.payment}</td>
 										<td className="py-2 px-3 text-right">
 											<div className="flex justify-end gap-2">
 												<button

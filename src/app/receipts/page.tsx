@@ -149,8 +149,8 @@ function ReceiptsList() {
         </div>
       </div>
 
-      {/* Mobile-optimized List View */}
-      <div className="divide-y divide-gray-100">
+  {/* Mobile-optimized List View */}
+  <div className="divide-y divide-gray-100 overflow-x-auto">
         {receipts.map((r) => (
           <div 
             key={r.id} 

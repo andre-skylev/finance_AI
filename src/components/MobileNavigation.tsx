@@ -1,194 +1,111 @@
-"use client"
+"use client";
 
-import Link from 'next/link'
-import { usePathname } from 'next/navigation'
-import { 
-  Home, 
-  Receipt, 
-  PlusCircle, 
-  Target, 
-  MoreHorizontal,
-  ArrowLeftRight,
-  CreditCard,
-  FileText,
-  Settings,
-  LogOut,
-  Globe,
-  Wallet,
-  HelpCircle
-} from 'lucide-react'
-import { useLanguage } from '@/contexts/LanguageContext'
-import { useAuth } from '@/components/AuthProvider'
-import { useState } from 'react'
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Menu, X, LogOut } from "lucide-react";
+import { useLanguage } from "@/contexts/LanguageContext";
+import { useAuth } from "@/components/AuthProvider";
+import { useState } from "react";
+import { useNavGroups } from "@/components/navConfig";
 
 export function MobileNavigation() {
-  const pathname = usePathname()
-  const { t, language, setLanguage } = useLanguage()
-  const { signOut } = useAuth()
-  const [showMore, setShowMore] = useState(false)
+  const pathname = usePathname();
+  const { t, language, setLanguage } = useLanguage();
+  const { signOut } = useAuth();
+  const [open, setOpen] = useState(false);
+  const navGroups = useNavGroups();
 
-  const mainNavItems = [
-    { href: '/dashboard', icon: Home, label: t('navigation.dashboard') },
-    { href: '/transactions', icon: ArrowLeftRight, label: t('navigation.transactions') },
-    // Special action: quick import PDF
-    { href: '/add', icon: PlusCircle, label: language === 'pt' ? 'Importar' : 'Import', isSpecial: true },
-    { href: '/receipts', icon: Receipt, label: t('navigation.receipts') },
-    { href: '#more', icon: MoreHorizontal, label: language === 'pt' ? 'Mais' : 'More', action: () => setShowMore(!showMore) }
-  ]
-
-  const moreItems = [
-    { href: '/goals', icon: Target, label: t('navigation.goals') },
-    { href: '/credit-cards', icon: CreditCard, label: t('navigation.creditCards') },
-  // Accounts dedicated page
-  { href: '/accounts', icon: Wallet, label: t('settings.accounts') },
-    { href: '/categories', icon: Receipt, label: t('navigation.categories') },
-    { href: '/installments', icon: ArrowLeftRight, label: t('navigation.installments') },
-  { href: '/fixed-costs', icon: Receipt, label: t('navigation.fixedCosts') },
-  // Help shortcut to onboarding steps (home page)
-  { href: '/', icon: HelpCircle, label: language === 'pt' ? 'Ajuda' : 'Help' },
-    { href: '/settings', icon: Settings, label: t('navigation.settings') }
-  ]
-
-  // Don't show on certain pages
-  if (pathname?.includes('/login') || pathname?.includes('/register')) {
-    return null
+  // Hide on auth pages
+  if (pathname?.includes("/login") || pathname?.includes("/register")) {
+    return null;
   }
 
   return (
     <>
-      {/* iOS-style tab bar with safe-area support */}
-      <div className="fixed bottom-0 left-0 right-0 z-40 md:hidden">
-        <div
-          className="bg-white/95 backdrop-blur-xl border-t border-gray-200/50"
-          style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px))' }}
-        >
-          <div className="grid grid-cols-5 items-center">
-            {mainNavItems.map((item) => {
-              const isActive = pathname === item.href
-              const Icon = item.icon
-
-              if (item.action) {
-                return (
-                  <button
-                    key={item.label}
-                    onClick={item.action}
-                    className="flex flex-col items-center justify-center py-2 px-1"
-                  >
-                    <Icon className={`h-6 w-6 ${showMore ? 'text-blue-600' : 'text-gray-600'}`} />
-                    <span className={`text-[10px] mt-1 ${showMore ? 'text-blue-600' : 'text-gray-600'}`}>
-                      {item.label}
-                    </span>
-                  </button>
-                )
-              }
-
-      if (item.isSpecial) {
-                return (
-                  <Link
-                    key={item.href}
-        href="/pdf-import"
-                    className="flex flex-col items-center justify-center py-2 px-1"
-                  >
-                    <div className="bg-blue-600 rounded-full p-1">
-                      <Icon className="h-7 w-7 text-white" />
-                    </div>
-                  </Link>
-                )
-              }
-
-              return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={() => setShowMore(false)}
-                  className="flex flex-col items-center justify-center py-2 px-1"
-                >
-                  <Icon className={`h-6 w-6 ${isActive ? 'text-blue-600' : 'text-gray-600'}`} />
-                  <span className={`text-[10px] mt-1 ${isActive ? 'text-blue-600' : 'text-gray-600'}`}>
-                    {item.label}
-                  </span>
-                </Link>
-              )
-            })}
-          </div>
-          {/* Extra touch-safe spacer above the home indicator */}
-          <div className="h-2" />
+      {/* Top fixed bar with hamburger on mobile */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-white/90 backdrop-blur border-b">
+        <div className="h-12 flex items-center justify-between px-3">
+          <button
+            onClick={() => setOpen(true)}
+            aria-label="Open menu"
+            className="p-2 rounded-md border hover:bg-gray-50"
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+          <Link href="/" className="text-sm font-semibold">FinanceAI</Link>
+          <div className="w-9" />
         </div>
       </div>
 
-      {/* More menu overlay */}
-      {showMore && (
-        <div 
-          className="fixed inset-0 z-30 md:hidden"
-          onClick={() => setShowMore(false)}
+      {/* Off-canvas overlay */}
+      {open && (
+        <div
+          className="fixed inset-0 z-50 md:hidden"
+          onClick={() => setOpen(false)}
         >
-          <div className="absolute inset-0 bg-black/30" />
+          <div className="absolute inset-0 bg-black/40" />
           <div
-            className="absolute left-0 right-0 bg-white rounded-t-2xl shadow-xl"
-            style={{ bottom: 'calc(56px + env(safe-area-inset-bottom, 0px))' }}
+            className="absolute top-0 left-0 right-0 bg-white h-full overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4">
-              <div className="w-12 h-1 bg-gray-300 rounded-full mx-auto mb-4" />
-              <div className="grid grid-cols-4 gap-4">
-                {moreItems.map((item) => {
-                  const Icon = item.icon
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      onClick={() => setShowMore(false)}
-                      className="flex flex-col items-center p-3"
-                    >
-                      <div className="w-14 h-14 bg-gray-100 rounded-2xl flex items-center justify-center mb-2">
-                        <Icon className="h-6 w-6 text-gray-700" />
-                      </div>
-                      <span className="text-xs text-gray-700 text-center">
-                        {item.label}
-                      </span>
-                    </Link>
-                  )
-                })}
-              </div>
-              
-              {/* Language and Logout section */}
-              <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
-                {/* Language toggle */}
-                <div className="flex gap-1">
+            <div className="flex items-center justify-between p-4 border-b">
+              <span className="font-semibold">{t('navigation.menu') || (language==='pt'?'Menu':'Menu')}</span>
+              <button
+                onClick={() => setOpen(false)}
+                aria-label="Close menu"
+                className="p-2 rounded-md border hover:bg-gray-50"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-6">
+              {navGroups.map((group) => (
+                <div key={group.title}>
+                  <div className="px-1 py-2 text-xs uppercase tracking-wide text-gray-500">
+                    {group.title}
+                  </div>
+                  <div className="grid">
+                    {group.items.map((item) => {
+                      const isActive = pathname === item.href;
+                      const Icon = item.icon;
+                      return (
+                        <Link
+                          key={item.href}
+                          href={item.href}
+                          onClick={() => setOpen(false)}
+                          className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
+                            isActive ? 'bg-gray-100 text-primary' : 'hover:bg-gray-50'
+                          }`}
+                        >
+                          <Icon className="h-4 w-4" />
+                          {item.label}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Language and logout */}
+              <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
+                <div className="flex gap-2">
                   <button
-                    onClick={() => {
-                      setLanguage('pt')
-                      setShowMore(false)
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      language === 'pt' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    onClick={() => { setLanguage('pt'); setOpen(false); }}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium ${language==='pt' ? 'bg-primary text-white' : 'bg-gray-100'}`}
                   >
                     PT
                   </button>
                   <button
-                    onClick={() => {
-                      setLanguage('en')
-                      setShowMore(false)
-                    }}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      language === 'en' 
-                        ? 'bg-blue-600 text-white' 
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
+                    onClick={() => { setLanguage('en'); setOpen(false); }}
+                    className={`px-3 py-1.5 rounded-md text-sm font-medium ${language==='en' ? 'bg-primary text-white' : 'bg-gray-100'}`}
                   >
                     EN
                   </button>
                 </div>
-                
-                {/* Logout button */}
                 <button
-                  onClick={() => {
-                    setShowMore(false)
-                    signOut()
-                  }}
-                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-md transition-colors"
+                  onClick={() => { setOpen(false); signOut(); }}
+                  className="flex items-center gap-2 px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 rounded-md"
                 >
                   <LogOut className="h-4 w-4" />
                   <span>{t('navigation.logout')}</span>
@@ -199,5 +116,5 @@ export function MobileNavigation() {
         </div>
       )}
     </>
-  )
+  );
 }
