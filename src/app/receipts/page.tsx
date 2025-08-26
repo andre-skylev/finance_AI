@@ -224,17 +224,12 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
   const { t, language } = useLanguage()
   const { formatBalance } = useCurrency()
   const [loading, setLoading] = React.useState(true)
-  const [items, setItems] = React.useState<any[]>([])
   const [transactions, setTransactions] = React.useState<any[]>([])
   const [error, setError] = React.useState<string>('')
-  const [editingItem, setEditingItem] = React.useState<any>(null)
-  const [itemForm, setItemForm] = React.useState({
-    description: '',
-    quantity: 1,
-    unit_price: '',
-    total: '',
-    institution: '',
-  })
+  // Items removed: we edit related transactions directly
+  const [editingItem, setEditingItem] = React.useState<any>(null) // kept to avoid broad refactor; unused
+  const [categories, setCategories] = React.useState<any[]>([])
+  const [itemForm, setItemForm] = React.useState({ description: '', quantity: 1, unit_price: '', total: '', institution: '', category_id: '' as string | '' }) // unused
   const [editingTransaction, setEditingTransaction] = React.useState<any>(null)
   const [editForm, setEditForm] = React.useState({
     amount: '',
@@ -248,16 +243,15 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
   const loadDetails = async () => {
       try {
         setLoading(true)
-        // Load receipt items
-    const itemsRes = await fetch(`/api/receipts/${receipt.id}/items`)
-        const itemsData = await itemsRes.json()
-        
-        // Load related transactions
+  // Load related transactions
     const transactionsRes = await fetch(`/api/receipts/${receipt.id}/transactions`)
         const transactionsData = await transactionsRes.json()
+  // Load categories for editing items
+  const catsRes = await fetch('/api/categories')
+  const catsData = await catsRes.json()
         
-        if (itemsRes.ok) setItems(itemsData.items || [])
         if (transactionsRes.ok) setTransactions(transactionsData.transactions || [])
+  if (catsRes.ok) setCategories(catsData.categories || [])
       } catch (e: any) {
         setError(e.message)
       } finally {
@@ -347,8 +341,6 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
         {/* Header with editable merchant name */}
         <EditableReceiptHeader receipt={receipt} onUpdated={(updated) => {
           onUpdate({ ...receipt, merchant_name: updated })
-          // refresh items so institution reflects updated merchant
-          fetch(`/api/receipts/${receipt.id}/items`).then(r=>r.json()).then(j=>setItems(j.items||[])).catch(()=>{})
         }} onDelete={onDelete} onClose={onClose} />
 
         {/* Content */}
@@ -389,52 +381,7 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
                 </div>
               </div>
 
-              {/* Receipt Items */}
-              {items.length > 0 && (
-                <div>
-                  <h3 className="font-medium text-gray-900 mb-3">{t('receipts.items')}</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-2">{t('receipts.description')}</th>
-                          <th className="text-right py-2">{t('receipts.quantity')}</th>
-                          <th className="text-right py-2">{t('receipts.unitPrice')}</th>
-                          <th className="text-right py-2">{t('receipts.total')}</th>
-                          <th className="text-center py-2">{t('common.actions')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((item, index) => (
-                          <tr key={index} className="border-b border-gray-100">
-                            <td className="py-2">{item.description}</td>
-                            <td className="py-2 text-right">{item.quantity || '—'}</td>
-                            <td className="py-2 text-right">{formatBalance(item.unit_price, receipt.currency || 'EUR')}</td>
-                            <td className="py-2 text-right font-medium">{formatBalance(item.total, receipt.currency || 'EUR')}</td>
-                            <td className="py-2 text-center">
-                              <button
-                                onClick={() => {
-                                  setEditingItem(item)
-                                  setItemForm({
-                                    description: item.description || '',
-                                    quantity: item.quantity || 1,
-                                    unit_price: String(item.unit_price ?? ''),
-                                    total: String(item.total ?? ''),
-                                    institution: item.institution || ''
-                                  })
-                                }}
-                                className="px-2 py-1 text-xs bg-blue-500 text-white rounded hover:bg-blue-600"
-                              >
-                                {t('common.edit')}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
+              {/* Items removed: edit related transactions directly */}
 
               {/* Related Transactions */}
               {transactions.length > 0 && (
@@ -495,6 +442,21 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
               </h3>
               
               <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('transactions.category')}
+                  </label>
+                  <select
+                    value={editForm.category_id}
+                    onChange={(e) => setEditForm({ ...editForm, category_id: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    <option value="">—</option>
+                    {categories.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     {language === 'pt' ? 'Tipo' : 'Type'}
@@ -565,119 +527,7 @@ function ReceiptDetailsModal({ receipt, onClose, onDelete, onUpdate }: {
           </div>
         )}
 
-        {/* Item Edit Modal */}
-        {editingItem && (
-          <div className="fixed inset-0 bg-black/50 z-60 flex items-center justify-center p-4">
-            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-              <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {language === 'pt' ? 'Editar Item do Recibo' : 'Edit Receipt Item'}
-              </h3>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('receipts.description')}
-                  </label>
-                  <input
-                    type="text"
-                    value={itemForm.description}
-                    onChange={(e) => setItemForm({ ...itemForm, description: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('receipts.quantity')}
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={itemForm.quantity}
-                      onChange={(e) => setItemForm({ ...itemForm, quantity: Number(e.target.value || 1) })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      {t('receipts.unitPrice')}
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      value={itemForm.unit_price}
-                      onChange={(e) => setItemForm({ ...itemForm, unit_price: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('receipts.total')}
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={itemForm.total}
-                    onChange={(e) => setItemForm({ ...itemForm, total: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {language === 'pt' ? 'Estabelecimento' : 'Institution'}
-                  </label>
-                  <input
-                    type="text"
-                    value={itemForm.institution}
-                    onChange={(e) => setItemForm({ ...itemForm, institution: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 mt-6">
-                <button
-                  onClick={() => setEditingItem(null)}
-                  className="px-4 py-2 text-sm bg-gray-500 text-white rounded-lg hover:bg-gray-600"
-                >
-                  {t('common.cancel')}
-                </button>
-                <button
-                  onClick={async () => {
-                    try {
-                      const payload = {
-                        transaction_id: editingItem.transaction_id,
-                        description: itemForm.description,
-                        quantity: itemForm.quantity,
-                        unit_price: Number(itemForm.unit_price),
-                        total: Number(itemForm.total),
-                        institution: itemForm.institution,
-                      }
-                      const res = await fetch(`/api/receipts/${receipt.id}/items`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(payload)
-                      })
-                      const j = await res.json()
-                      if (!res.ok) throw new Error(j.error || 'Failed to update item')
-                      // refresh items list
-                      const itemsRes = await fetch(`/api/receipts/${receipt.id}/items`)
-                      const itemsData = await itemsRes.json()
-                      if (itemsRes.ok) setItems(itemsData.items || [])
-                      setEditingItem(null)
-                    } catch (e: any) {
-                      alert(e.message)
-                    }
-                  }}
-                  className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600"
-                >
-                  {t('common.save')}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+  {/* Items edit removed */}
       </div>
     </div>
   )
