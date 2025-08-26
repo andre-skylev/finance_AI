@@ -228,6 +228,8 @@
   "periods": {
     "weekly": "Semanal",
     "monthly": "Mensal",
+  "bimonthly": "Bimestral",
+  "quarterly": "Trimestral",
     "yearly": "Anual",
     "semiannual": "Semestral",
     "one_time": "Data única",

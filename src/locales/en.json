@@ -227,6 +227,8 @@
   "periods": {
     "weekly": "Weekly",
     "monthly": "Monthly",
+  "bimonthly": "Bimonthly",
+  "quarterly": "Quarterly",
     "yearly": "Yearly",
     "semiannual": "Semiannual",
     "one_time": "One-time",
