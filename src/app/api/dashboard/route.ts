@@ -109,6 +109,12 @@ function safeClosingDate(year: number, monthIndex0: number, closingDay: number):
   return new Date(year, monthIndex0, day)
 }
 
+function safeDueDate(year: number, monthIndex0: number, dueDay: number): Date {
+  const lastDay = new Date(year, monthIndex0 + 1, 0).getDate()
+  const day = Math.min(Math.max(1, dueDay || 1), lastDay)
+  return new Date(year, monthIndex0, day)
+}
+
 function getOpenCycleWindow(today: Date, closingDay: number) {
   const y = today.getFullYear()
   const m = today.getMonth()
@@ -145,6 +151,54 @@ function getOpenCycleWindow(today: Date, closingDay: number) {
   return { start, endExclusive, statementClose }
 }
 
+// Upcoming payment window: if the current month's due date hasn't passed, the upcoming payment
+// corresponds to the statement that closed last month. Otherwise, it corresponds to the current
+// month's closing statement with due date next month.
+function getUpcomingPaymentWindow(today: Date, closingDay: number, dueDay: number) {
+  const y = today.getFullYear()
+  const m = today.getMonth()
+  const thisClose = safeClosingDate(y, m, closingDay)
+  thisClose.setHours(0,0,0,0)
+  const prevMonth = new Date(y, m - 1, 1)
+  const prevClose = safeClosingDate(prevMonth.getFullYear(), prevMonth.getMonth(), closingDay)
+  prevClose.setHours(0,0,0,0)
+  const prevPrevMonth = new Date(y, m - 2, 1)
+  const prevPrevClose = safeClosingDate(prevPrevMonth.getFullYear(), prevPrevMonth.getMonth(), closingDay)
+  prevPrevClose.setHours(0,0,0,0)
+  const nextMonth = new Date(y, m + 1, 1)
+  const nextClose = safeClosingDate(nextMonth.getFullYear(), nextMonth.getMonth(), closingDay)
+  nextClose.setHours(0,0,0,0)
+
+  const thisDue = safeDueDate(y, m, dueDay)
+  thisDue.setHours(0,0,0,0)
+  const nextDue = safeDueDate(nextMonth.getFullYear(), nextMonth.getMonth(), dueDay)
+  nextDue.setHours(0,0,0,0)
+
+  let start: Date, endExclusive: Date, statementClose: Date, dueDate: Date
+  if (today <= thisDue) {
+    // Next payment is this month's due; related statement closed last month
+    start = new Date(prevPrevClose)
+    start.setDate(start.getDate() + 1)
+    start.setHours(0,0,0,0)
+    endExclusive = new Date(prevClose)
+    endExclusive.setDate(endExclusive.getDate() + 1)
+    endExclusive.setHours(0,0,0,0)
+    statementClose = prevClose
+    dueDate = thisDue
+  } else {
+    // Next payment is next month's due; related statement closes this month
+    start = new Date(prevClose)
+    start.setDate(start.getDate() + 1)
+    start.setHours(0,0,0,0)
+    endExclusive = new Date(thisClose)
+    endExclusive.setDate(endExclusive.getDate() + 1)
+    endExclusive.setHours(0,0,0,0)
+    statementClose = thisClose
+    dueDate = nextDue
+  }
+  return { start, endExclusive, statementClose, dueDate }
+}
+
 async function getCreditCardForecast(supabase: any, userId: string, displayCurrency: 'EUR'|'BRL'|'USD') {
   try {
     const rates = await getLatestRates(supabase)
@@ -166,14 +220,15 @@ async function getCreditCardForecast(supabase: any, userId: string, displayCurre
       return NextResponse.json({ data: [] })
     }
 
-    // Build per-card windows
-    const windows = new Map<string, { start: string; endExclusive: string; statementClose: string }>()
+    // Build per-card upcoming payment windows
+    const windows = new Map<string, { start: string; endExclusive: string; statementClose: string; dueDate: string }>()
     cards.forEach((c: any) => {
-      const { start, endExclusive, statementClose } = getOpenCycleWindow(today, Number(c.closing_day || 1))
+      const { start, endExclusive, statementClose, dueDate } = getUpcomingPaymentWindow(today, Number(c.closing_day || 1), Number(c.due_day || 1))
       windows.set(c.id, {
         start: start.toISOString().split('T')[0],
         endExclusive: endExclusive.toISOString().split('T')[0],
-        statementClose: statementClose.toISOString().split('T')[0]
+        statementClose: statementClose.toISOString().split('T')[0],
+        dueDate: dueDate.toISOString().split('T')[0]
       })
     })
 
@@ -181,7 +236,7 @@ async function getCreditCardForecast(supabase: any, userId: string, displayCurre
     // Do per-card queries to keep it simple and correct.
     const results: any[] = []
     for (const c of cards) {
-      const w = windows.get(c.id)!
+  const w = windows.get(c.id)!
       const { data: txs, error: txErr } = await supabase
         .from('credit_card_transactions')
         .select('amount, currency, transaction_type')
@@ -210,6 +265,7 @@ async function getCreditCardForecast(supabase: any, userId: string, displayCurre
         cycle_start: w.start,
         cycle_end_exclusive: w.endExclusive,
         statement_close: w.statementClose,
+        upcoming_due_date: w.dueDate,
         forecast_amount: Math.round(totalCardCurrency * 100) / 100,
         forecast_converted: Math.round(totalDisplay * 100) / 100,
         display_currency: displayCurrency,

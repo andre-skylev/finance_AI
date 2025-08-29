@@ -16,6 +16,7 @@ type ForecastItem = {
   cycle_start: string
   cycle_end_exclusive: string
   statement_close: string
+  upcoming_due_date?: string
   forecast_amount: number // in card currency
   forecast_converted: number // in EUR (API query currency)
 }
@@ -86,12 +87,16 @@ export function CreditCardForecast() {
                   <div className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
                     <CalendarDays className="h-3 w-3" />
                     <span>
-                      {translate('dashboard.cycle') || 'Ciclo'}: {fmtDate(it.cycle_start)} — {fmtDate(new Date(new Date(it.cycle_end_exclusive).getTime() - 24*60*60*1000).toISOString())}
-                    </span>
-                    <span className="mx-2">•</span>
-                    <span>
                       {translate('dashboard.closesOn') || 'Fecha em'} {fmtDate(it.statement_close)}
                     </span>
+                    {it.upcoming_due_date && (
+                      <>
+                        <span className="mx-2">•</span>
+                        <span>
+                          {translate('dashboard.dueOn') || 'Vence em'} {fmtDate(it.upcoming_due_date)}
+                        </span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div className="text-right whitespace-nowrap">

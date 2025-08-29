@@ -112,6 +112,7 @@
   "noCCForecast": "Sem dados de cartão no ciclo atual.",
   "cycle": "Ciclo",
   "closesOn": "Fecha em",
+  "dueOn": "Vence em",
   "inCardCurrency": "na moeda do cartão",
     "fixedCosts": {
       "title": "Custos Fixos",

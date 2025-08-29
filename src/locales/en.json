@@ -111,6 +111,7 @@
   "noCCForecast": "No card data in the current cycle.",
   "cycle": "Cycle",
   "closesOn": "Closes on",
+  "dueOn": "Due on",
   "inCardCurrency": "in card currency",
     "fixedCosts": {
       "title": "Fixed Costs",
