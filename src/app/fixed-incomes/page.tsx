@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
@@ -27,7 +27,7 @@ type FixedIncome = {
 }
 
 export default function FixedIncomesPage() {
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const { user } = useAuth()
   const { t } = useLanguage()
   const { displayCurrency, convert } = useCurrency()
@@ -46,14 +46,7 @@ export default function FixedIncomesPage() {
     account_id: '' as string
   })
 
-  useEffect(() => { if (user) load() }, [user])
-  // When accounts load, preselect first active account
-  useEffect(() => {
-    const first = accounts.find(a => a.is_active)
-    setForm(prev => ({ ...prev, account_id: prev.account_id || first?.id || '' }))
-  }, [accounts])
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     const { data, error } = await supabase
       .from('fixed_incomes')
@@ -62,7 +55,15 @@ export default function FixedIncomesPage() {
       .order('name')
     if (!error) setItems((data || []) as any)
     setLoading(false)
-  }
+  }, [supabase, user])
+
+  useEffect(() => { if (user) load() }, [user, load])
+  // When accounts load, preselect first active account
+  useEffect(() => {
+    const first = accounts.find(a => a.is_active)
+    setForm(prev => ({ ...prev, account_id: prev.account_id || first?.id || '' }))
+  }, [accounts])
+
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()

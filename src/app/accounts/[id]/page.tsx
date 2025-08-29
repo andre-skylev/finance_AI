@@ -47,6 +47,8 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
   const [account, setAccount] = useState<Account | null>(null)
   const [movements, setMovements] = useState<Movement[]>([])
   const [hideBalance, setHideBalance] = useState(false)
+  const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const allSelectedIds = useMemo(() => Object.keys(selected).filter((k) => selected[k]), [selected])
 
   const [form, setForm] = useState({
     type: 'expense' as 'expense' | 'income',
@@ -322,9 +324,74 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
           <div className="p-6 rounded-md border bg-white text-center text-gray-600">{t.none}</div>
         ) : (
           <div className="bg-white rounded-lg border overflow-x-auto">
+            <div className="flex items-center justify-between p-2 border-b bg-gray-50">
+              <div className="text-sm text-gray-600">
+                {allSelectedIds.length > 0 ? (language === 'pt' ? `${allSelectedIds.length} selecionadas` : `${allSelectedIds.length} selected`) : null}
+              </div>
+              {allSelectedIds.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!user) return
+                    const confirmMsg = language === 'pt' ? `Apagar ${allSelectedIds.length} movimentações selecionadas?` : `Delete ${allSelectedIds.length} selected movements?`
+                    if (!window.confirm(confirmMsg)) return
+                    try {
+                      const params = new URLSearchParams()
+                      allSelectedIds.forEach((id) => params.append('ids', id))
+                      const res = await fetch(`/api/transactions?${params.toString()}`, { method: 'DELETE' })
+                      if (!res.ok) throw new Error('Failed')
+                      // Refresh account balance
+                      if (account) {
+                        const { data: accUpd } = await supabase
+                          .from('accounts')
+                          .select('id, name, bank_name, balance, currency')
+                          .eq('id', account.id)
+                          .eq('user_id', user.id)
+                          .single()
+                        if (accUpd) setAccount(accUpd as any)
+                      }
+                      // Refresh list
+                      const { data: txs } = await supabase
+                        .from('bank_account_transactions')
+                        .select('id, amount, currency, description, transaction_date, transaction_type, category_id')
+                        .eq('user_id', user.id)
+                        .eq('account_id', account?.id || '')
+                        .order('transaction_date', { ascending: false })
+                      const mapped: Movement[] = (txs || []).map((t: any) => ({
+                        id: t.id,
+                        amount: Number(t.amount),
+                        currency: t.currency,
+                        description: t.description,
+                        transaction_date: t.transaction_date,
+                        type: t.transaction_type === 'credit' ? 'income' : 'expense',
+                        category_id: t.category_id ?? null,
+                      }))
+                      setMovements(mapped)
+                      setSelected({})
+                    } catch (e) {
+                      console.error(e)
+                    }
+                  }}
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700"
+                >
+                  <Trash className="h-4 w-4" /> {language === 'pt' ? 'Apagar selecionadas' : 'Delete selected'}
+                </button>
+              )}
+            </div>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-gray-200 text-left">
+                  <th className="py-2 px-3 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="select all"
+                      checked={movements.length > 0 && allSelectedIds.length === movements.length}
+                      onChange={(e) => {
+                        const next: Record<string, boolean> = {}
+                        if (e.target.checked) movements.forEach((m) => (next[m.id] = true))
+                        setSelected(next)
+                      }}
+                    />
+                  </th>
                   <th className="py-2 px-3">{t.date}</th>
                   <th className="py-2 px-3">{t.desc}</th>
                   <th className="py-2 px-3 text-right">{t.amount}</th>
@@ -336,6 +403,13 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
               <tbody>
                 {movements.map((m) => (
                   <tr key={m.id} className="border-b border-gray-100">
+                    <td className="py-2 px-3">
+                      <input
+                        type="checkbox"
+                        checked={!!selected[m.id]}
+                        onChange={(e) => setSelected((prev) => ({ ...prev, [m.id]: e.target.checked }))}
+                      />
+                    </td>
                     <td className="py-2 px-3">{new Date(m.transaction_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US')}</td>
                     <td className="py-2 px-3">{m.description || '-'}
                     </td>
@@ -376,12 +450,9 @@ export default function AccountPage({ params }: { params: Promise<{ id: string }
                             const confirmMsg = language === 'pt' ? 'Tem certeza que deseja eliminar esta movimentação?' : 'Are you sure you want to delete this movement?'
                             if (!window.confirm(confirmMsg)) return
                             try {
-                              const { error: delErr } = await supabase
-                                .from('bank_account_transactions')
-                                .delete()
-                                .eq('id', m.id)
-                                .eq('user_id', user.id)
-                              if (delErr) throw delErr
+                              const params = new URLSearchParams({ id: m.id })
+                              const res = await fetch(`/api/transactions?${params.toString()}`, { method: 'DELETE' })
+                              if (!res.ok) throw new Error('Failed')
                               // Refresh account balance and list
                               if (account) {
                                 const { data: accUpd } = await supabase

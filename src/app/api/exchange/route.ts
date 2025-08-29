@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/admin'
 
 // Contract
 // GET /api/exchange -> rates for EUR, BRL, USD pairs used in app
@@ -149,16 +150,25 @@ export async function GET(_req: NextRequest) {
       return NextResponse.json({ error: 'No exchange rates available' }, { status: 503 })
     }
 
-    // 3) Upsert into cache
-  const { error: upsertErr } = await supabase
-      .from('exchange_rates')
-      .upsert({ rate_date: todayStr, eur_to_brl, brl_to_eur, eur_to_usd, usd_to_eur, usd_to_brl, brl_to_usd, fetched_at: new Date().toISOString() }, { onConflict: 'rate_date' })
-      .select()
-      .maybeSingle()
-
-    if (upsertErr) {
-      // If caching fails, still return the rates
-      console.error('Failed to cache exchange rates:', upsertErr)
+    // 3) Upsert into cache (server-only). Avoid RLS 42501 by using service role when available; otherwise skip caching silently.
+    try {
+      if (process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        const admin = createServiceClient()
+        await admin
+          .from('exchange_rates')
+          .upsert({
+            rate_date: todayStr,
+            eur_to_brl,
+            brl_to_eur,
+            eur_to_usd,
+            usd_to_eur,
+            usd_to_brl,
+            brl_to_usd,
+            fetched_at: new Date().toISOString(),
+          }, { onConflict: 'rate_date' })
+      }
+    } catch (upsertErr) {
+      // Do not log loudly to avoid noise; caching is optional.
     }
 
     return NextResponse.json({

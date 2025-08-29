@@ -16,7 +16,8 @@
   "language": "Idioma",
   "toggleMenu": "Alternar menu",
   "receipts": "Recibos",
-  "budgets": "Orçamentos"
+  "budgets": "Orçamentos",
+  "repasses": "Repasses"
   },
   "creditCards": {
     "closingDay": "Dia Fechamento",
@@ -107,6 +108,11 @@
     "noBudgetDataDesc": "Configure orçamentos para ver comparações",
     "coach": "Sugestões inteligentes",
     "noCoachTips": "Sem sugestões no momento",
+  "ccForecast": "Previsão da próxima fatura",
+  "noCCForecast": "Sem dados de cartão no ciclo atual.",
+  "cycle": "Ciclo",
+  "closesOn": "Fecha em",
+  "inCardCurrency": "na moeda do cartão",
     "fixedCosts": {
       "title": "Custos Fixos",
       "estimated": "Estimado",
@@ -177,7 +183,9 @@
     "activate": "Ativar",
     "deactivate": "Desativar",
     "monthly": "mês",
+  "billingPeriod": "Período de faturação",
     "deleteConfirm": "Tem a certeza que deseja eliminar este custo fixo?",
+  "deleteEntryConfirm": "Tem a certeza que deseja eliminar este lançamento?",
     "placeholders": {
       "name": "Ex: Renda da casa",
       "amount": "0.00",
@@ -196,8 +204,10 @@
     "pending": "pendentes",
     "overdue": "em atraso",
     "thisMonth": "Este Mês",
+  "nextMonth": "Próximo Mês",
     "generateEntries": "Gerar Lançamentos",
     "noEntriesThisMonth": "Sem lançamentos para este mês",
+  "tipGenerateNext": "Use o botão acima para gerar os lançamentos do próximo mês.",
     "addEntry": "Adicionar Lançamento",
     "markPaid": "Marcar Pago",
     "manageCosts": "Gerir Custos Fixos",

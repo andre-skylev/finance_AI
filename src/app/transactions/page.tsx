@@ -1,6 +1,6 @@
 "use client"
 
-import { Suspense, useState, useEffect } from 'react'
+import { Suspense, useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useAccounts } from '@/hooks/useFinanceData'
 import { useLanguage } from '@/contexts/LanguageContext'
@@ -30,13 +30,7 @@ function TransactionsPageContent() {
   const title = language === 'pt' ? 'Transações' : 'Transactions'
   const subtitle = language === 'pt' ? 'Gerencie suas transações financeiras.' : 'Manage your financial transactions.'
 
-  useEffect(() => {
-    if (user) {
-      fetchTransactions()
-    }
-  }, [user, accountId])
-
-  const fetchTransactions = async () => {
+  const fetchTransactions = useCallback(async () => {
     try {
       const params = new URLSearchParams()
       if (accountId) params.append('account_id', accountId)
@@ -49,7 +43,13 @@ function TransactionsPageContent() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [accountId])
+
+  useEffect(() => {
+    if (user) {
+      fetchTransactions()
+    }
+  }, [user, accountId, fetchTransactions])
 
   const filteredTransactions = transactions.filter(t =>
     t.description.toLowerCase().includes(searchTerm.toLowerCase())

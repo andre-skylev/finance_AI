@@ -18,7 +18,7 @@ export type NavGroup = { title: string; items: NavItem[] };
 
 // Shared nav groups used by both Sidebar (desktop) and Mobile menu
 export function useNavGroups(): NavGroup[] {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   return [
     {
       title: t("navGroup.overview") || "Visão geral",
@@ -38,7 +38,8 @@ export function useNavGroups(): NavGroup[] {
       items: [
         { href: "/transactions", icon: ArrowLeftRight, label: t("navigation.transactions") },
         { href: "/installments", icon: ListOrdered, label: t("navigation.installments") },
-        { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
+  { href: "/categories", icon: ListOrdered, label: t("navigation.categories") },
+  { href: "/repasses", icon: ArrowLeftRight, label: t("navigation.repasses") || (language==='pt'?'Repasses':'Payouts') },
       ],
     },
     {

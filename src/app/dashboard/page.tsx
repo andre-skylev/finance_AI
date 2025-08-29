@@ -9,6 +9,7 @@ import { GoalsProgress } from "@/components/widgets/GoalsProgress";
 import { BudgetVsActual } from "@/components/widgets/BudgetVsActual";
 import { FinancialKPIs } from "@/components/widgets/FinancialKPIs";
 import { FixedCosts } from "@/components/widgets/FixedCosts";
+import { CreditCardForecast } from "@/components/widgets/CreditCardForecast";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Button } from "@/components/ui/button";
 import CurrencyDropdown from "@/components/CurrencyDropdown";
@@ -25,30 +26,27 @@ export default function DashboardPage() {
   
   const RateInfo = () => {
     const { language } = useLanguage()
-    const text = useMemo(() => {
-      if (!rates) return null
-      const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
-      const locale = language === 'pt' ? 'pt-PT' : 'en-US'
-      const when = last.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
-      const stale = rates.stale ? (language === 'pt' ? ' • cache antigo' : ' • stale cache') : ''
-      const src = rates.source ? ` • ${rates.source}` : ''
-      const updated = language === 'pt' ? ' • atualizado ' : ' • updated '
+    if (!rates) return null
+    const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
+    const locale = language === 'pt' ? 'pt-PT' : 'en-US'
+    const when = last.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
+    const stale = rates.stale ? (language === 'pt' ? ' • cache antigo' : ' • stale cache') : ''
+    const src = rates.source ? ` • ${rates.source}` : ''
+    const updated = language === 'pt' ? ' • atualizado ' : ' • updated '
 
-      const lines: string[] = []
-      if (displayCurrency === 'EUR') {
-        if (rates.brl_to_eur) lines.push(`BRL→EUR: ${rates.brl_to_eur.toFixed(4)}`)
-        if (rates.usd_to_eur) lines.push(`USD→EUR: ${rates.usd_to_eur.toFixed(4)}`)
-      } else if (displayCurrency === 'BRL') {
-        if (rates.eur_to_brl) lines.push(`EUR→BRL: ${rates.eur_to_brl.toFixed(4)}`)
-        if (rates.usd_to_brl) lines.push(`USD→BRL: ${rates.usd_to_brl.toFixed(4)}`)
-      } else if (displayCurrency === 'USD') {
-        if (rates.eur_to_usd) lines.push(`EUR→USD: ${rates.eur_to_usd.toFixed(4)}`)
-        if (rates.brl_to_usd) lines.push(`BRL→USD: ${rates.brl_to_usd.toFixed(4)}`)
-      }
-      if (lines.length === 0) return null
-      return `${lines.join(' • ')}${updated}${when}${stale}${src}`
-    }, [rates, displayCurrency, language])
-    if (!text) return null
+    const lines: string[] = []
+    if (displayCurrency === 'EUR') {
+      if (rates.brl_to_eur) lines.push(`BRL→EUR: ${rates.brl_to_eur.toFixed(4)}`)
+      if (rates.usd_to_eur) lines.push(`USD→EUR: ${rates.usd_to_eur.toFixed(4)}`)
+    } else if (displayCurrency === 'BRL') {
+      if (rates.eur_to_brl) lines.push(`EUR→BRL: ${rates.eur_to_brl.toFixed(4)}`)
+      if (rates.usd_to_brl) lines.push(`USD→BRL: ${rates.usd_to_brl.toFixed(4)}`)
+    } else if (displayCurrency === 'USD') {
+      if (rates.eur_to_usd) lines.push(`EUR→USD: ${rates.eur_to_usd.toFixed(4)}`)
+      if (rates.brl_to_usd) lines.push(`BRL→USD: ${rates.brl_to_usd.toFixed(4)}`)
+    }
+    if (lines.length === 0) return null
+    const text = `${lines.join(' • ')}${updated}${when}${stale}${src}`
     return (
       <div className="text-xs text-muted-foreground text-right">{text}</div>
     )
@@ -91,10 +89,15 @@ export default function DashboardPage() {
           </Button>
         </div>
         
-        {/* Primeira linha - Patrimônio e Saldos */}
+        {/* Primeira linha - Patrimônio, Saldos e Previsão CC */}
         <div className="grid grid-cols-12 gap-4 md:gap-6">
           <NetWorth />
           <AccountBalances />
+        </div>
+        <div className="grid grid-cols-12 gap-4 md:gap-6">
+          <div className="col-span-12 lg:col-span-6">
+            <CreditCardForecast />
+          </div>
         </div>
         
         {/* Segunda linha - Fluxo de Caixa e Gastos por Categoria */}
@@ -115,7 +118,7 @@ export default function DashboardPage() {
           <FixedCosts />
         </div>
         
-        {/* Quinta linha - Transações Recentes */}
+  {/* Quinta linha - Transações Recentes */}
         <div className="grid grid-cols-12 gap-4 md:gap-6">
           <div className="col-span-12">
             <RecentTransactions />

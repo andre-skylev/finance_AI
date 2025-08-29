@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useCallback, useMemo, useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
 import { useLanguage } from '../../contexts/LanguageContext'
@@ -14,19 +14,13 @@ import { GoalForm, GoalFormValues } from './components/GoalForm'
 export default function GoalsPage() {
   const { user } = useAuth()
   const { t } = useLanguage()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [goals, setGoals] = useState<Goal[]>([])
   const [loading, setLoading] = useState(true)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null)
 
-  useEffect(() => {
-    if (user) {
-      fetchGoals()
-    }
-  }, [user])
-
-  const fetchGoals = async () => {
+  const fetchGoals = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('goals')
@@ -35,13 +29,20 @@ export default function GoalsPage() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-  setGoals(data || [])
+      setGoals(data || [])
     } catch (error) {
       console.error('Error fetching goals:', error)
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, user])
+
+  useEffect(() => {
+    if (user) {
+      fetchGoals()
+    }
+  }, [user, fetchGoals])
+
 
   const handleFormSubmit = async (values: GoalFormValues) => {
     try {

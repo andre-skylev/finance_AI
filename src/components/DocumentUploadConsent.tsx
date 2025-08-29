@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { X, FileText, CreditCard, AlertCircle, CheckCircle, Info, Shield, Upload } from 'lucide-react'
 
 interface CreditCardInfo {
@@ -87,13 +87,7 @@ export default function DocumentUploadConsent({
   })
   const [showPrivacy, setShowPrivacy] = useState(false)
 
-  useEffect(() => {
-    if (file && step === 'upload') {
-      handleFileUpload()
-    }
-  }, [file])
-
-  const handleFileUpload = async () => {
+  const handleFileUpload = useCallback(async () => {
     if (!file) return
 
     setIsProcessing(true)
@@ -141,7 +135,13 @@ export default function DocumentUploadConsent({
     } finally {
       setIsProcessing(false)
     }
-  }
+  }, [file, autoProcess])
+
+  useEffect(() => {
+    if (file && step === 'upload') {
+      handleFileUpload()
+    }
+  }, [file, step, handleFileUpload])
 
   const handleConfirm = () => {
     if (!processingResult) return

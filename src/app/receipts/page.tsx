@@ -49,17 +49,17 @@ function ReceiptsList() {
       try {
     const res = await fetch('/api/receipts/with-sources')
         const j = await res.json()
-        if (!res.ok) throw new Error(j.error || t('receipts.errors.loadFailed'))
+    if (!res.ok) throw new Error(j.error || t('receipts.errors.loadFailed'))
         if (!cancelled) setReceipts(j.receipts || [])
       } catch (e: any) {
-        if (!cancelled) setError(e.message || t('receipts.errors.unexpected'))
+    if (!cancelled) setError(e.message || t('receipts.errors.unexpected'))
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
     load()
     return () => { cancelled = true }
-  }, [])
+  }, [t])
 
   const handleReceiptClick = (receipt: any) => {
     setSelectedReceipt(receipt)

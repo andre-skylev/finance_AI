@@ -8,6 +8,7 @@ import { ArrowLeft, Eye, EyeOff, FileText, Plus, CreditCard as CreditCardIcon, P
 import Link from 'next/link'
 import { use, useEffect, useMemo, useState } from 'react'
 import { useCategories } from '@/hooks/useFinanceData'
+import { useCurrency } from '@/hooks/useCurrency'
 import PDFUploader from '@/components/PDFUploader'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
@@ -46,6 +47,8 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 	const [card, setCard] = useState<CreditCard | null>(null)
 	const [movements, setMovements] = useState<CardTx[]>([])
 	const [hideBalance, setHideBalance] = useState(false)
+		const [selected, setSelected] = useState<Record<string, boolean>>({})
+		const selectedIds = useMemo(() => Object.keys(selected).filter(k => selected[k]), [selected])
 
 	const [form, setForm] = useState({
 		type: 'purchase' as 'purchase' | 'payment',
@@ -120,13 +123,8 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 		})()
 	}, [user, id, supabase, t.error])
 
-	const formatCurrency = (amount: number, currency: string) => {
-		try {
-			return new Intl.NumberFormat(language === 'pt' ? 'pt-PT' : 'en-US', { style: 'currency', currency }).format(amount)
-		} catch {
-			return `${currency} ${amount.toFixed(2)}`
-		}
-	}
+	// Centralized currency formatter to ensure correct symbol placement (e.g., BRL -> "R$ 1.234,56")
+	const { format } = useCurrency()
 
 	const { categories } = useCategories()
 
@@ -214,14 +212,14 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 					<div className="flex items-center gap-4 flex-wrap">
 						{card && (
 							<div className="text-xl font-semibold">
-								{hideBalance ? '••••••' : formatCurrency(card.current_balance, card.currency)}
+								{hideBalance ? '••••••' : format(card.current_balance, card.currency as any)}
 							</div>
 						)}
 						{typeof card?.credit_limit === 'number' && (
 							<div className="text-sm text-gray-600">
-								{t.limit}: {hideBalance ? '•••••' : formatCurrency(card.credit_limit!, card.currency)}
+								{t.limit}: {hideBalance ? '•••••' : format(card.credit_limit!, card.currency as any)}
 								{typeof availableLimit === 'number' && (
-									<span className="ml-3">• {t.available}: {hideBalance ? '•••••' : formatCurrency(availableLimit, card!.currency)}</span>
+									<span className="ml-3">• {t.available}: {hideBalance ? '•••••' : format(availableLimit, card!.currency as any)}</span>
 								)}
 							</div>
 						)}
@@ -316,11 +314,56 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 					<div className="p-3 rounded-md border bg-red-50 text-red-700">{error}</div>
 				) : movements.length === 0 ? (
 					<div className="p-6 rounded-md border bg-white text-center text-gray-600">{t.none}</div>
-				) : (
+						) : (
 					<div className="bg-white rounded-lg border overflow-x-auto">
-						<table className="w-full text-sm">
+								<div className="flex items-center justify-between p-2 border-b bg-gray-50">
+									<div className="text-sm text-gray-600">{selectedIds.length > 0 ? (language==='pt'?`${selectedIds.length} selecionadas`:`${selectedIds.length} selected`): null}</div>
+									{selectedIds.length>0 && (
+										<button
+											className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-red-600 text-white hover:bg-red-700"
+											onClick={async()=>{
+												if(!card) return
+												const msg=language==='pt'?`Apagar ${selectedIds.length} movimentações?`:`Delete ${selectedIds.length} transactions?`
+												if(!window.confirm(msg)) return
+												try{
+													const res=await fetch('/api/credit-card-transactions',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:selectedIds})})
+													if(!res.ok){const j=await res.json().catch(()=>({})); throw new Error(j.error||`HTTP ${res.status}`)}
+													const { data: txs } = await supabase
+														.from('credit_card_transactions')
+														.select('id, transaction_date, merchant_name, description, amount, currency, transaction_type, installments, installment_number, category_id')
+														.eq('user_id', user!.id)
+														.eq('credit_card_id', card.id)
+														.order('transaction_date', { ascending: false })
+													setMovements((txs||[]) as any)
+													const { data: updCard } = await supabase
+														.from('credit_cards')
+														.select('id, card_name, bank_name, currency, credit_limit, current_balance')
+														.eq('id', card.id)
+														.eq('user_id', user!.id)
+														.single()
+													if(updCard) setCard(updCard as any)
+													setSelected({})
+												}catch(e){ console.error(e)}
+											}}
+										>
+											<Trash className="h-4 w-4"/> {language==='pt'?'Apagar selecionadas':'Delete selected'}
+										</button>
+									)}
+								</div>
+								<table className="w-full text-sm">
 							<thead>
 								<tr className="border-b border-gray-200 text-left">
+											<th className="py-2 px-3 w-8">
+												<input
+													type="checkbox"
+													checked={movements.length>0 && selectedIds.length===movements.length}
+													onChange={(e)=>{
+														const next: Record<string, boolean> = {}
+														if(e.target.checked) movements.forEach(m=>next[m.id]=true)
+														setSelected(next)
+													}}
+												/>
+											</th>
 									<th className="py-2 px-3">{t.date}</th>
 									<th className="py-2 px-3">{t.merchant}</th>
 									<th className="py-2 px-3 hidden sm:table-cell">{t.desc}</th>
@@ -333,11 +376,14 @@ export default function CreditCardMovementsPage({ params }: { params: Promise<{ 
 							<tbody>
 								{movements.map((m) => (
 									<tr key={m.id} className="border-b border-gray-100">
+												<td className="py-2 px-3">
+													<input type="checkbox" checked={!!selected[m.id]} onChange={(e)=>setSelected(prev=>({...prev,[m.id]:e.target.checked}))} />
+												</td>
 										<td className="py-2 px-3 whitespace-nowrap">{new Date(m.transaction_date).toLocaleDateString(language === 'pt' ? 'pt-PT' : 'en-US')}</td>
 										<td className="py-2 px-3 max-w-[160px] truncate">{m.merchant_name || '-'}</td>
 										<td className="py-2 px-3 hidden sm:table-cell">{m.description || '-'}</td>
 										<td className={`py-2 px-3 text-right font-medium ${m.transaction_type === 'purchase' ? 'text-red-600' : 'text-green-600'}`}>
-											{formatCurrency(Math.abs(m.amount), card?.currency || m.currency)}
+											{format(Math.abs(m.amount), (card?.currency || m.currency) as any)}
 										</td>
 										<td className="py-2 px-3 hidden sm:table-cell">{m.category_id ? (categories.find((c: any) => c.id === m.category_id)?.name || '-') : '-'}</td>
 										<td className="py-2 px-3 hidden sm:table-cell">{m.transaction_type === 'purchase' ? t.purchase : t.payment}</td>

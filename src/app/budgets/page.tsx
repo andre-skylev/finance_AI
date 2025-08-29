@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
@@ -25,7 +25,7 @@ type Budget = {
 export default function BudgetsPage(){
   const { user } = useAuth()
   const { t } = useLanguage()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [budgets, setBudgets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
@@ -44,9 +44,7 @@ export default function BudgetsPage(){
   const [customStart, setCustomStart] = useState<string>('')
   const [customEnd, setCustomEnd] = useState<string>('')
 
-  useEffect(()=>{ if(user){ load() } },[user])
-
-  const load = async ()=>{
+  const load = useCallback(async ()=>{
     try{
       setLoading(true)
       const { data: cats } = await supabase
@@ -55,14 +53,16 @@ export default function BudgetsPage(){
         .or('user_id.eq.'+user!.id+',is_default.eq.true')
       setCategories((cats||[]).filter((c:any)=>c.type==='expense'))
 
-  // Use API to compute Budget vs Actual without SQL view
-  const res = await fetch(`/api/dashboard?type=budget-vs-actual`, { cache: 'no-store' })
-  const json = await res.json()
-  setBudgets(json?.data||[])
+      // Use API to compute Budget vs Actual without SQL view
+      const res = await fetch(`/api/dashboard?type=budget-vs-actual`, { cache: 'no-store' })
+      const json = await res.json()
+      setBudgets(json?.data||[])
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, user])
+
+  useEffect(()=>{ if(user){ load() } },[user, load])
 
   const openNew = ()=>{ 
     setEditing(null); 

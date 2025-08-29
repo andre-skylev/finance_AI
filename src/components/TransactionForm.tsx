@@ -72,7 +72,7 @@ export function TransactionForm({ isOpen, onOpenChange, onCreated }: Transaction
         } catch {}
       })()
     }
-  }, [isOpen])
+  }, [isOpen, supabase])
 
   const calculateTotal = () => {
     if (items.length > 0) {

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, RotateCcw, X, Zap } from 'lucide-react'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { useCurrency } from '@/hooks/useCurrency'
@@ -724,11 +725,15 @@ export default function PDFUploader({ onSuccess, preselectedAccountId, forcedTar
                     <X className="h-4 w-4" />
                   </button>
                 </div>
-                <img 
-                  src={previewUrl} 
-                  alt="Preview" 
-                  className="w-full max-h-64 object-contain rounded-lg" 
-                />
+                <div className="relative w-full h-64">
+                  <Image
+                    src={previewUrl}
+                    alt="Preview"
+                    fill
+                    className="object-contain rounded-lg"
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                  />
+                </div>
                 <div className="mt-3 flex gap-2">
                   <button
                     type="button"

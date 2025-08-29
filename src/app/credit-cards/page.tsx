@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Plus, CreditCard, Edit2, Trash2, Eye, EyeOff } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { useCurrency } from '@/hooks/useCurrency'
 
 interface CreditCard {
   id: string
@@ -69,13 +70,10 @@ export default function CreditCardsPage() {
     notes: ''
   })
 
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
+  const { format } = useCurrency()
 
-  useEffect(() => {
-    fetchCreditCards()
-  }, [])
-
-  const fetchCreditCards = async () => {
+  const fetchCreditCards = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('credit_cards')
@@ -90,7 +88,11 @@ export default function CreditCardsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, t])
+
+  useEffect(() => {
+    fetchCreditCards()
+  }, [fetchCreditCards])
 
   const handleAddCard = async () => {
     try {
@@ -187,12 +189,7 @@ export default function CreditCardsPage() {
     })
   }
 
-  const formatCurrency = (amount: number, currency: string) => {
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: currency
-    }).format(amount)
-  }
+  // Use centralized formatter to respect correct symbol placement per currency (e.g., BRL prefix)
 
   const getCardBrandIcon = (brand?: string) => {
     switch (brand?.toLowerCase()) {
@@ -466,7 +463,7 @@ export default function CreditCardsPage() {
             <span>{t('creditCardsPage.labels.creditLimit')}</span>
                         <span className="font-medium">
                           {showBalances && card.credit_limit 
-                            ? formatCurrency(card.credit_limit, card.currency)
+                            ? format(card.credit_limit, card.currency as any)
                             : '••••••'
                           }
                         </span>
@@ -475,7 +472,7 @@ export default function CreditCardsPage() {
             <span>{t('creditCardsPage.labels.balance')}</span>
                         <span className="font-medium">
                           {showBalances 
-                            ? formatCurrency(card.current_balance, card.currency)
+                            ? format(card.current_balance, card.currency as any)
                             : '••••••'
                           }
                         </span>

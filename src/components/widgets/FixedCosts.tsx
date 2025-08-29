@@ -68,7 +68,7 @@ export function FixedCosts() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch('/api/dashboard?type=fixed-costs')
+        const response = await fetch(`/api/dashboard?type=fixed-costs&currency=${encodeURIComponent(displayCurrency)}`)
         if (response.ok) {
           const result = await response.json()
           setData(result)
@@ -81,7 +81,7 @@ export function FixedCosts() {
     }
 
     fetchData()
-  }, [])
+  }, [displayCurrency])
 
   if (loading) {
     return (
@@ -130,9 +130,9 @@ export function FixedCosts() {
     ? ((dashboard.totalActual - dashboard.totalEstimated) / dashboard.totalEstimated) * 100 
     : 0
 
-  // Fixed costs are typically in EUR by default, so convert them
+  // Already converted on the API side to displayCurrency; format as-is
   const formatCurrency = (amount: number) => {
-    return formatWithConversion(amount, 'EUR')
+    return formatWithConversion(amount, displayCurrency as any)
   }
 
   const getVarianceIcon = (variance: number) => {

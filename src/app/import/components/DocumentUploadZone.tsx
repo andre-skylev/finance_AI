@@ -39,6 +39,14 @@ export default function DocumentUploadZone({ onUploadComplete, className = '' }:
       .catch(console.error)
   })
 
+  const addToHistory = useCallback((entry: Omit<typeof uploadHistory[0], 'id' | 'timestamp'>) => {
+    setUploadHistory(prev => [{
+      ...entry,
+      id: Math.random().toString(36).substr(2, 9),
+      timestamp: new Date()
+    }, ...prev].slice(0, 5))
+  }, [])
+
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const file = acceptedFiles[0]
     if (file) {
@@ -65,7 +73,7 @@ export default function DocumentUploadZone({ onUploadComplete, className = '' }:
       setUploadedFile(file)
       setShowConsent(true)
     }
-  }, [])
+  }, [addToHistory])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -76,13 +84,7 @@ export default function DocumentUploadZone({ onUploadComplete, className = '' }:
     maxSize: 10 * 1024 * 1024
   })
 
-  const addToHistory = (entry: Omit<typeof uploadHistory[0], 'id' | 'timestamp'>) => {
-    setUploadHistory(prev => [{
-      ...entry,
-      id: Math.random().toString(36).substr(2, 9),
-      timestamp: new Date()
-    }, ...prev].slice(0, 5))
-  }
+  
 
   const handleUploadConfirm = async (result: any, options: any) => {
     if (uploadedFile) {

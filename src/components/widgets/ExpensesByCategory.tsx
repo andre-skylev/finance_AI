@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useLanguage } from '../../contexts/LanguageContext';
@@ -42,8 +42,8 @@ export function ExpensesByCategory() {
   }, [displayCurrency])
 
   // Simple color palette for children
-  const CHILD_COLORS = ['#60a5fa','#34d399','#f59e0b','#f472b6','#22c55e','#a78bfa','#fb7185','#38bdf8','#84cc16','#f97316']
-  const childColors = (count: number) => Array.from({length: count}, (_, i)=> CHILD_COLORS[i % CHILD_COLORS.length])
+  const CHILD_COLORS = useMemo(() => ['#60a5fa','#34d399','#f59e0b','#f472b6','#22c55e','#a78bfa','#fb7185','#38bdf8','#84cc16','#f97316'], [])
+  const childColors = useCallback((count: number) => Array.from({length: count}, (_, i)=> CHILD_COLORS[i % CHILD_COLORS.length]), [CHILD_COLORS])
 
   const currentData = useMemo(() => {
     if (!selected) {
@@ -51,7 +51,7 @@ export function ExpensesByCategory() {
     }
     const colors = childColors(selected.children.length)
     return selected.children.map((c, idx) => ({ name: c.name, value: c.value, color: colors[idx], id: c.id }))
-  }, [parents, selected])
+  }, [parents, selected, childColors])
 
   const total = currentData.reduce((sum, item) => sum + item.value, 0);
 

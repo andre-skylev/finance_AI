@@ -357,24 +357,33 @@ export async function DELETE(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const idsParam = searchParams.getAll('ids')
+    // Support ids=1&ids=2 or ids=1,2 comma separated
+    let ids: string[] = []
+    if (idsParam && idsParam.length > 0) {
+      ids = idsParam.flatMap(v => String(v).split(',')).map(s => s.trim()).filter(Boolean)
+    }
+    const idsToDelete = ids.length ? Array.from(new Set(ids)) : (id ? [id] : [])
 
-    if (!id) {
+    if (idsToDelete.length === 0) {
       return NextResponse.json({ error: 'Transaction ID is required' }, { status: 400 })
     }
 
-    // Delete transaction
-    const { error } = await supabase
-  .from('bank_account_transactions')
+    // Delete transaction(s)
+    let query = supabase
+      .from('bank_account_transactions')
       .delete()
-      .eq('id', id)
       .eq('user_id', user.id)
+    if (idsToDelete.length === 1) query = query.eq('id', idsToDelete[0])
+    else query = query.in('id', idsToDelete)
+    const { error } = await query
 
     if (error) {
       console.error('Error deleting transaction:', error)
       return NextResponse.json({ error: 'Failed to delete transaction' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, deleted: idsToDelete.length })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })

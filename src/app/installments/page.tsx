@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import ProtectedRoute from '@/components/ProtectedRoute'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/AuthProvider'
@@ -50,7 +50,7 @@ interface InstallmentGroup {
 export default function InstallmentsPage() {
   const { user } = useAuth()
   const { t } = useLanguage()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
   const [installmentGroups, setInstallmentGroups] = useState<InstallmentGroup[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all')
@@ -71,26 +71,7 @@ export default function InstallmentsPage() {
   })
   const [accounts, setAccounts] = useState<any[]>([])
 
-  useEffect(() => {
-    if (user) {
-      fetchInstallments()
-      ;(async()=>{
-        const { data } = await supabase
-          .from('credit_cards')
-          .select('id, card_name, bank_name')
-          .eq('user_id', user.id)
-        setCards(data||[])
-        const { data: accs } = await supabase
-          .from('accounts')
-          .select('id, name, bank_name')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-        setAccounts(accs||[])
-      })()
-    }
-  }, [user])
-
-  const fetchInstallments = async () => {
+  const fetchInstallments = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('credit_card_transactions')
@@ -167,7 +148,27 @@ export default function InstallmentsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [supabase, user])
+
+  useEffect(() => {
+    if (user) {
+      fetchInstallments()
+      ;(async()=>{
+        const { data } = await supabase
+          .from('credit_cards')
+          .select('id, card_name, bank_name')
+          .eq('user_id', user.id)
+        setCards(data||[])
+        const { data: accs } = await supabase
+          .from('accounts')
+          .select('id, name, bank_name')
+          .eq('user_id', user.id)
+          .eq('is_active', true)
+        setAccounts(accs||[])
+      })()
+    }
+  }, [user, fetchInstallments, supabase])
+
 
   const getFilteredGroups = () => {
     switch (filter) {

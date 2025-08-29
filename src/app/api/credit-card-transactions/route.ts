@@ -233,50 +233,59 @@ export async function DELETE(request: NextRequest) {
     if (userError || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const body = await request.json().catch(() => ({}))
-    const { id } = body as { id?: string }
-    if (!id) return NextResponse.json({ error: 'Missing transaction id' }, { status: 400 })
+    const { id, ids } = body as { id?: string; ids?: string[] }
+    const idsToDelete: string[] = (Array.isArray(ids) && ids.length > 0)
+      ? Array.from(new Set(ids.filter(Boolean)))
+      : (id ? [id] : [])
+    if (idsToDelete.length === 0) return NextResponse.json({ error: 'Missing transaction id(s)' }, { status: 400 })
 
-    // Fetch transaction to ensure ownership and get card id
-    const { data: existing, error: getErr } = await supabase
+    // Fetch transactions to ensure ownership and gather affected card ids
+    const { data: existingRows, error: getErr } = await supabase
       .schema('public')
       .from('credit_card_transactions')
       .select('id, credit_card_id, user_id')
-      .eq('id', id)
+      .in('id', idsToDelete)
       .eq('user_id', user.id)
-      .single()
-    if (getErr || !existing) {
+    if (getErr) {
+      return NextResponse.json({ error: 'Failed to load transactions', details: getErr }, { status: 500 })
+    }
+    if (!existingRows || existingRows.length === 0) {
       return NextResponse.json({ error: 'Not found' }, { status: 404 })
     }
 
+    // Proceed delete
     const { error: delErr } = await supabase
       .schema('public')
       .from('credit_card_transactions')
       .delete()
-      .eq('id', id)
+      .in('id', existingRows.map((r: any) => r.id))
       .eq('user_id', user.id)
     if (delErr) {
       const anyErr = delErr as any
-      return NextResponse.json({ error: anyErr?.message || 'Failed to delete transaction', code: anyErr?.code, details: anyErr }, { status: 500 })
+      return NextResponse.json({ error: anyErr?.message || 'Failed to delete transaction(s)', code: anyErr?.code, details: anyErr }, { status: 500 })
     }
 
-    // Fallback: recompute card balance after delete
-    const { data: sumRows, error: sumErr } = await supabase
-      .schema('public')
-      .from('credit_card_transactions')
-      .select('amount, transaction_type')
-      .eq('credit_card_id', existing.credit_card_id)
-      .eq('user_id', user.id)
-    if (!sumErr && sumRows) {
-      const newBal = (sumRows as any[]).reduce((acc, r) => acc + (['purchase', 'fee', 'interest'].includes(r.transaction_type) ? Number(r.amount) : -Number(r.amount)), 0)
-      await supabase
+    // Recompute balances for affected cards
+    const affectedCardIds = Array.from(new Set((existingRows as any[]).map(r => r.credit_card_id).filter(Boolean)))
+    for (const cardId of affectedCardIds) {
+      const { data: sumRows, error: sumErr } = await supabase
         .schema('public')
-        .from('credit_cards')
-        .update({ current_balance: newBal })
-        .eq('id', existing.credit_card_id)
+        .from('credit_card_transactions')
+        .select('amount, transaction_type')
+        .eq('credit_card_id', cardId)
         .eq('user_id', user.id)
+      if (!sumErr && sumRows) {
+        const newBal = (sumRows as any[]).reduce((acc, r) => acc + (['purchase', 'fee', 'interest'].includes(r.transaction_type) ? Number(r.amount) : -Number(r.amount)), 0)
+        await supabase
+          .schema('public')
+          .from('credit_cards')
+          .update({ current_balance: newBal })
+          .eq('id', cardId)
+          .eq('user_id', user.id)
+      }
     }
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, deleted: existingRows.length })
   } catch (error) {
     console.error('API Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
