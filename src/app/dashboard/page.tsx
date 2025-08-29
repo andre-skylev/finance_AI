@@ -11,6 +11,9 @@ import { FinancialKPIs } from "@/components/widgets/FinancialKPIs";
 import { FixedCosts } from "@/components/widgets/FixedCosts";
 import { CreditCardForecast } from "@/components/widgets/CreditCardForecast";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import CoachWidget from "@/components/widgets/CoachWidget";
+import RepassesWidget from "@/components/widgets/RepassesWidget";
+import WidgetGrid, { WidgetDef } from "@/components/widgets/WidgetGrid";
 import CurrencyDropdown from "@/components/CurrencyDropdown";
 import { Loader2 } from "lucide-react";
 import { useCurrency as useCurrencyContext } from "@/contexts/CurrencyContext";
@@ -27,25 +30,47 @@ export default function DashboardPage() {
     const last = rates.fetched_at ? new Date(rates.fetched_at) : new Date(rates.date)
     const locale = language === 'pt' ? 'pt-PT' : 'en-US'
     const when = last.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })
-    const stale = rates.stale ? (language === 'pt' ? ' • cache antigo' : ' • stale cache') : ''
-    const src = rates.source ? ` • ${rates.source}` : ''
-    const updated = language === 'pt' ? ' • atualizado ' : ' • updated '
-
-    const lines: string[] = []
-    if (displayCurrency === 'EUR') {
-      if (rates.brl_to_eur) lines.push(`BRL→EUR: ${rates.brl_to_eur.toFixed(4)}`)
-      if (rates.usd_to_eur) lines.push(`USD→EUR: ${rates.usd_to_eur.toFixed(4)}`)
-    } else if (displayCurrency === 'BRL') {
-      if (rates.eur_to_brl) lines.push(`EUR→BRL: ${rates.eur_to_brl.toFixed(4)}`)
-      if (rates.usd_to_brl) lines.push(`USD→BRL: ${rates.usd_to_brl.toFixed(4)}`)
-    } else if (displayCurrency === 'USD') {
-      if (rates.eur_to_usd) lines.push(`EUR→USD: ${rates.eur_to_usd.toFixed(4)}`)
-      if (rates.brl_to_usd) lines.push(`BRL→USD: ${rates.brl_to_usd.toFixed(4)}`)
+    const labels = {
+      rates: language === 'pt' ? 'Taxas de câmbio' : 'Exchange rates',
+      updated: language === 'pt' ? 'Atualizado' : 'Updated',
+      stale: language === 'pt' ? 'cache antigo' : 'stale cache',
+      source: language === 'pt' ? 'Fonte' : 'Source'
     }
-    if (lines.length === 0) return null
-    const text = `${lines.join(' • ')}${updated}${when}${stale}${src}`
+
+    type Pair = { from: 'EUR'|'BRL'|'USD'; to: 'EUR'|'BRL'|'USD'; value: number }
+    const pairs: Pair[] = []
+    if (displayCurrency === 'EUR') {
+      if (rates.brl_to_eur) pairs.push({ from: 'BRL', to: 'EUR', value: rates.brl_to_eur })
+      if (rates.usd_to_eur) pairs.push({ from: 'USD', to: 'EUR', value: rates.usd_to_eur as number })
+    } else if (displayCurrency === 'BRL') {
+      if (rates.eur_to_brl) pairs.push({ from: 'EUR', to: 'BRL', value: rates.eur_to_brl })
+      if (rates.usd_to_brl) pairs.push({ from: 'USD', to: 'BRL', value: rates.usd_to_brl as number })
+    } else if (displayCurrency === 'USD') {
+      if (rates.eur_to_usd) pairs.push({ from: 'EUR', to: 'USD', value: rates.eur_to_usd as number })
+      if (rates.brl_to_usd) pairs.push({ from: 'BRL', to: 'USD', value: rates.brl_to_usd as number })
+    }
+    if (pairs.length === 0) return null
+
     return (
-      <div className="text-xs text-muted-foreground text-right">{text}</div>
+      <div className="text-xs text-muted-foreground flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="mb-1">{labels.rates}</div>
+          <div className="flex flex-wrap gap-1.5">
+            {pairs.map((p, idx) => (
+              <span key={`${p.from}-${p.to}-${idx}`} className="inline-flex items-center gap-1 rounded border bg-white/70 px-1.5 py-0.5">
+                <span>1 {p.from}</span>
+                <span className="opacity-60">=</span>
+                <span>{p.value.toFixed(4)} {p.to}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="text-[11px] text-right whitespace-nowrap">
+          <span>{labels.updated}: {when}</span>
+          {rates.stale && <span> • {labels.stale}</span>}
+          {rates.source && <span> • {labels.source}: {rates.source}</span>}
+        </div>
+      </div>
     )
   }
   // Dropdown-based currency selector
@@ -71,77 +96,41 @@ export default function DashboardPage() {
           <CurrencyToggle />
           <RateInfo />
         </div>
-        {/* KPIs principais */}
-        <FinancialKPIs />
-        
-  {/* Import button removed per request */}
-        
-        {/* Primeira linha - Patrimônio, Saldos e Previsão CC */}
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <NetWorth />
-          <AccountBalances />
-        </div>
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <div className="col-span-12 lg:col-span-6">
-            <CreditCardForecast />
-          </div>
-        </div>
-        
-        {/* Segunda linha - Fluxo de Caixa e Gastos por Categoria */}
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <CashFlow />
-          <ExpensesByCategory />
-        </div>
-        
-        {/* Terceira linha - Metas Financeiras + Coach */}
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <GoalsProgress />
-          <CoachWidget />
-        </div>
-        
-        {/* Quarta linha - Orçamento vs Realizado e Custos Fixos */}
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <BudgetVsActual />
-          <FixedCosts />
-        </div>
-        
-  {/* Quinta linha - Transações Recentes */}
-        <div className="grid grid-cols-12 gap-4 md:gap-6">
-          <div className="col-span-12">
-            <RecentTransactions />
-          </div>
-        </div>
+  {/* Dashboard widgets - draggable/addable */}
+  <DashboardWidgets />
       </div>
     </ProtectedRoute>
   );
 }
 
-function CoachWidget(){
-  const { t } = useLanguage();
-  const [tips, setTips] = useState<string[]>([])
-  useEffect(()=>{
-    let cancelled = false
-    const load = async ()=>{
-      try{
-        const res = await fetch('/api/coach');
-        if(!res.ok){ setTips([]); return }
-        const j = await res.json()
-        if(!cancelled) setTips(j.tips||[])
-      }catch{ if(!cancelled) setTips([]) }
-    }
-    load();
-    return ()=>{ cancelled = true }
-  },[])
-  return (
-    <div className="col-span-12 lg:col-span-4 bg-white rounded-lg border p-4">
-      <div className="font-medium mb-2">{t('dashboard.coach') || 'Sugestões inteligentes'}</div>
-      {tips.length===0 ? (
-        <div className="text-sm text-muted-foreground">{t('dashboard.noCoachTips') || 'Sem sugestões no momento'}</div>
-      ) : (
-        <ul className="list-disc ml-5 space-y-1 text-sm">
-          {tips.map((s, i)=> (<li key={i}>{s}</li>))}
-        </ul>
-      )}
-    </div>
-  )
+function DashboardWidgets() {
+  const widgets: WidgetDef[] = [
+    { id: 'financial-kpis', title: 'KPIs Financeiros', size: 'large', component: FinancialKPIs },
+    { id: 'net-worth', title: 'Patrimônio Líquido', size: 'small', component: NetWorth },
+    { id: 'account-balances', title: 'Saldos de Contas', size: 'small', component: AccountBalances },
+    { id: 'credit-card-forecast', title: 'Fatura do Cartão', size: 'medium', component: CreditCardForecast },
+  { id: 'repasses', title: 'Repasses', size: 'medium', component: RepassesWidget as any },
+    { id: 'cash-flow', title: 'Fluxo de Caixa', size: 'medium', component: CashFlow },
+    { id: 'expenses-by-category', title: 'Gastos por Categoria', size: 'medium', component: ExpensesByCategory },
+    { id: 'goals-progress', title: 'Metas', size: 'medium', component: GoalsProgress },
+    { id: 'budget-vs-actual', title: 'Orçamento vs Realizado', size: 'medium', component: BudgetVsActual },
+    { id: 'fixed-costs', title: 'Custos Fixos', size: 'medium', component: FixedCosts },
+    { id: 'recent-transactions', title: 'Transações Recentes', size: 'large', component: RecentTransactions },
+    { id: 'coach', title: 'Sugestões', size: 'small', component: CoachWidget },
+  ]
+  const defaultLayout = [
+    { id: 'financial-kpis', size: 'large' as const },
+    { id: 'net-worth', size: 'small' as const },
+    { id: 'account-balances', size: 'small' as const },
+    { id: 'credit-card-forecast', size: 'medium' as const },
+  { id: 'repasses', size: 'medium' as const },
+    { id: 'cash-flow', size: 'medium' as const },
+    { id: 'expenses-by-category', size: 'medium' as const },
+    { id: 'goals-progress', size: 'medium' as const },
+    { id: 'budget-vs-actual', size: 'medium' as const },
+    { id: 'fixed-costs', size: 'medium' as const },
+    { id: 'recent-transactions', size: 'large' as const },
+    { id: 'coach', size: 'small' as const },
+  ]
+  return <WidgetGrid available={widgets} defaultLayout={defaultLayout} />
 }
