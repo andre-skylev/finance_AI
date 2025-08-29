@@ -37,6 +37,7 @@ interface FixedCostsData {
     paidCount: number
     pendingCount: number
     overdueCount: number
+  totalUnpaid: number
     byType: Record<string, {
       estimated: number
       actual: number
@@ -55,6 +56,18 @@ interface FixedCostsData {
     status: 'paid' | 'pending' | 'overdue'
     paymentDate?: string
     variance: number
+  }>
+  entries?: Array<{
+    id: string
+    fixed_cost_id: string
+    name: string
+    type: string
+    provider: string | null
+    dueDate: string | null
+    status: 'paid' | 'pending' | 'overdue'
+    amount_planned: number
+    amount_actual: number
+    currency: string
   }>
   month: string
 }
@@ -206,6 +219,14 @@ export function FixedCosts() {
             </div>
           </div>
 
+          {/* Total unpaid */}
+          <div className="rounded-md border p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">{t('dashboard.fixedCosts.totalUnpaid') || 'Total não pagos'}</span>
+              <span className="text-sm font-semibold">{formatCurrency(dashboard.totalUnpaid)}</span>
+            </div>
+          </div>
+
           {/* Top cost types */}
           <div>
             <p className="text-sm font-medium mb-2">
@@ -235,6 +256,29 @@ export function FixedCosts() {
               })}
             </div>
           </div>
+
+          {/* All entries list */}
+          {data.entries && data.entries.length > 0 && (
+            <div>
+              <p className="text-sm font-medium mb-2">{t('dashboard.fixedCosts.allEntries') || 'Lançamentos do mês'}</p>
+              <div className="divide-y border rounded-md">
+                {data.entries.map((e) => (
+                  <div key={e.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{e.name}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {e.dueDate ? new Date(e.dueDate).toLocaleDateString('pt-PT') : '—'} • {t(`fixedCosts.status.${e.status}`) || e.status}
+                      </div>
+                    </div>
+                    <div className="text-right whitespace-nowrap">
+                      <div className="text-sm font-semibold">{formatCurrency(e.status === 'paid' ? (e.amount_actual || e.amount_planned) : e.amount_planned)}</div>
+                      <div className="text-[10px] text-muted-foreground">{e.status === 'paid' ? (t('dashboard.fixedCosts.actual') || 'Real') : (t('dashboard.fixedCosts.estimated') || 'Estimado')}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

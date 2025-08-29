@@ -364,9 +364,10 @@ async function getNetWorth(supabase: any, userId: string, displayCurrency: 'EUR'
 
 async function getAccountBalances(supabase: any, userId: string) {
   try {
+    // Load active accounts
     const { data: accounts, error } = await supabase
       .from('accounts')
-      .select('id, name, bank_name, account_type, currency, balance, is_active, created_at, updated_at')
+  .select('id, name, bank_name, account_type, currency, balance, is_active')
       .eq('user_id', userId)
       .eq('is_active', true)
       .order('name', { ascending: true })
@@ -375,8 +376,70 @@ async function getAccountBalances(supabase: any, userId: string) {
       console.error('Error fetching account balances:', error)
       return NextResponse.json({ error: 'Failed to fetch account balances' }, { status: 500 })
     }
+    if (!accounts || accounts.length === 0) {
+      return NextResponse.json({ accounts: [] })
+    }
 
-    return NextResponse.json({ accounts: accounts || [] })
+    // Adjust authoritative balance by excluding future-dated real txs and any planned placeholders
+    const rates = await getLatestRates(supabase)
+    const todayIso = new Date().toISOString().split('T')[0]
+    const accIds = accounts.map((a: any) => a.id)
+
+    // Future transactions after today (we'll exclude planned in code to avoid null-handling issues)
+    const { data: futureTxs } = await supabase
+      .schema('public')
+      .from('bank_account_transactions')
+      .select('account_id, amount, currency, transaction_type, transaction_date, notes')
+      .eq('user_id', userId)
+      .in('account_id', accIds.length ? accIds : ['00000000-0000-0000-0000-000000000000'])
+      .gt('transaction_date', todayIso)
+
+    // Planned placeholders (any date, still marked planned:true)
+    const { data: plannedTxs } = await supabase
+      .schema('public')
+      .from('bank_account_transactions')
+      .select('account_id, amount, currency, transaction_type')
+      .eq('user_id', userId)
+      .in('account_id', accIds.length ? accIds : ['00000000-0000-0000-0000-000000000000'])
+      .ilike('notes', '%planned:true%')
+
+    const futureAdj = new Map<string, number>()
+    for (const t of futureTxs || []) {
+      const notes = String((t as any).notes || '').toLowerCase()
+      if (notes.includes('planned:true')) continue
+      const acc = (accounts as any[]).find((a) => a.id === t.account_id)
+      if (!acc) continue
+      const cur: 'EUR'|'BRL'|'USD' = (t.currency || 'EUR')
+      const accCur: 'EUR'|'BRL'|'USD' = (acc.currency || 'EUR')
+      const amt = convertAmount(Number(t.amount || 0), cur, accCur, rates)
+      const sign = (t.transaction_type === 'credit') ? 1 : -1
+      futureAdj.set(t.account_id, (futureAdj.get(t.account_id) || 0) + sign * amt)
+    }
+
+    const plannedAdj = new Map<string, number>()
+    for (const t of plannedTxs || []) {
+      const acc = (accounts as any[]).find((a) => a.id === t.account_id)
+      if (!acc) continue
+      const cur: 'EUR'|'BRL'|'USD' = (t.currency || 'EUR')
+      const accCur: 'EUR'|'BRL'|'USD' = (acc.currency || 'EUR')
+      const amt = convertAmount(Number(t.amount || 0), cur, accCur, rates)
+      const sign = (t.transaction_type === 'credit') ? 1 : -1
+      plannedAdj.set(t.account_id, (plannedAdj.get(t.account_id) || 0) + sign * amt)
+    }
+
+    const result = (accounts || []).map((a: any) => {
+      const base = Number(a.balance || 0)
+      const adj = (futureAdj.get(a.id) || 0) + (plannedAdj.get(a.id) || 0)
+      // Exclude future and planned amounts from displayed balance
+      const display = Math.round((base - adj) * 100) / 100
+      return {
+        name: a.name,
+        currency: a.currency || 'EUR',
+        balance: display,
+      }
+    })
+
+    return NextResponse.json({ accounts: result })
   } catch (error) {
     console.error('Error in getAccountBalances:', error)
     return NextResponse.json({ error: 'Failed to get account balances' }, { status: 500 })
@@ -976,8 +1039,8 @@ async function getFixedCostsData(supabase: any, userId: string, displayCurrency:
         id,
         name,
         cost_type,
-    estimated_amount,
-    currency,
+        estimated_amount,
+        currency,
         provider,
         due_day,
         is_active
@@ -995,10 +1058,12 @@ async function getFixedCostsData(supabase: any, userId: string, displayCurrency:
   const { data: monthlyEntries, error: entriesError } = await supabase
       .from('fixed_cost_entries')
       .select(`
+    id,
         fixed_cost_id,
         amount,
         actual_amount,
         status,
+    due_date,
         payment_date
       `)
       .eq('user_id', userId)
@@ -1008,79 +1073,79 @@ async function getFixedCostsData(supabase: any, userId: string, displayCurrency:
       console.error('Error fetching monthly entries:', entriesError)
     }
 
-    // Combine data
-    const entriesMap = new Map()
-    ;(monthlyEntries || []).forEach((entry: any) => {
-      entriesMap.set(entry.fixed_cost_id, entry)
+    // Index fixed costs by id for enrichment
+  type FixedCostRow = { id: string; name: string; cost_type: string; estimated_amount?: number|null; currency: 'EUR'|'BRL'|'USD'; provider?: string|null; due_day?: number|null }
+  const costIndex = new Map<string, FixedCostRow>((fixedCosts as FixedCostRow[] || []).map((c) => [c.id, c]))
+
+    // Build entries list enriched with cost metadata and converted amounts
+    type EntryRow = { id: string; fixed_cost_id: string; amount: number|null; actual_amount: number|null; status: 'paid'|'pending'|'overdue'|null; due_date?: string|null }
+    type EnrichedEntry = { id: string; fixed_cost_id: string; name: string; type: string; provider: string|null; dueDate: string|null; status: 'paid'|'pending'|'overdue'; amount_planned: number; amount_actual: number; currency: 'EUR'|'BRL'|'USD' }
+    const entries: EnrichedEntry[] = ((monthlyEntries as EntryRow[] | null) || []).map((e) => {
+      const cost = costIndex.get(e.fixed_cost_id)
+      const cur: 'EUR'|'BRL'|'USD' = (cost?.currency || 'EUR')
+      const planned = Number(e.amount || 0)
+      const actualNative = Number(e.actual_amount ?? 0)
+      const amountPlannedConv = convertAmount(planned, cur, displayCurrency, rates)
+      const amountActualConv = convertAmount(actualNative, cur, displayCurrency, rates)
+      return {
+        id: e.id,
+        fixed_cost_id: e.fixed_cost_id,
+        name: cost?.name || '—',
+        type: cost?.cost_type || 'other',
+        provider: cost?.provider || null,
+        dueDate: (e.due_date as string | null) || null,
+        status: ((e.status as any) || 'pending') as 'paid'|'pending'|'overdue',
+        amount_planned: amountPlannedConv,
+        amount_actual: amountActualConv,
+        currency: displayCurrency,
+      }
     })
 
+    // Dashboard aggregates derived from entries
     const dashboard = {
-      totalEstimated: 0,
-      totalActual: 0,
-      paidCount: 0,
-      pendingCount: 0,
-      overdueCount: 0,
-      byType: {} as Record<string, {
-        estimated: number,
-        actual: number,
-        count: number
-      }>
+      totalEstimated: entries.reduce((s: number, it: EnrichedEntry) => s + (it.amount_planned || 0), 0),
+      totalActual: entries.filter((it: EnrichedEntry) => it.status === 'paid').reduce((s: number, it: EnrichedEntry) => s + (it.amount_actual || it.amount_planned || 0), 0),
+      paidCount: entries.filter((it: EnrichedEntry) => it.status === 'paid').length,
+      pendingCount: entries.filter((it: EnrichedEntry) => it.status === 'pending').length,
+      overdueCount: entries.filter((it: EnrichedEntry) => it.status === 'overdue').length,
+      totalUnpaid: entries.filter((it: EnrichedEntry) => it.status !== 'paid').reduce((s: number, it: EnrichedEntry) => s + (it.amount_planned || 0), 0),
+      byType: {} as Record<string, { estimated: number; actual: number; count: number }>,
     }
 
-    const costs = (fixedCosts || []).map((cost: any) => {
-      const entry = entriesMap.get(cost.id)
-      // Fall back to base amount when estimated_amount is not provided
-      const estimatedNative = Number((cost.estimated_amount ?? cost.amount) || 0)
-      const estimated = convertAmount(estimatedNative, (cost.currency || 'EUR'), displayCurrency, rates)
-  const actualNative = entry ? Number((entry.actual_amount ?? entry.amount) || 0) : 0
-  // Use fixed cost currency for entries
-  const actual = convertAmount(actualNative, (cost.currency || 'EUR'), displayCurrency, rates)
-
-      dashboard.totalEstimated += estimated
-
-      if (entry) {
-        dashboard.totalActual += actual
-        
-        if (entry.status === 'paid') {
-          dashboard.paidCount++
-        } else if (entry.status === 'pending') {
-          dashboard.pendingCount++
-        } else if (entry.status === 'overdue') {
-          dashboard.overdueCount++
-        }
-      } else {
-        // Not tracked this month, count as pending
-        dashboard.pendingCount++
+  for (const it of entries as EnrichedEntry[]) {
+      if (!dashboard.byType[it.type]) {
+        dashboard.byType[it.type] = { estimated: 0, actual: 0, count: 0 }
       }
-
-      // Group by type
-      if (!dashboard.byType[cost.cost_type]) {
-        dashboard.byType[cost.cost_type] = { estimated: 0, actual: 0, count: 0 }
+      dashboard.byType[it.type].estimated += (it.amount_planned || 0)
+      if (it.status === 'paid') {
+        dashboard.byType[it.type].actual += (it.amount_actual || it.amount_planned || 0)
       }
-      dashboard.byType[cost.cost_type].estimated += estimated
-      dashboard.byType[cost.cost_type].actual += actual
-      dashboard.byType[cost.cost_type].count++
+      dashboard.byType[it.type].count += 1
+    }
 
+    // Legacy per-cost summary kept for compatibility (derived from entries)
+    const costs = Array.from(costIndex.values()).map((cost: FixedCostRow) => {
+      const related = entries.filter((e: EnrichedEntry) => e.fixed_cost_id === cost.id)
+      const estimated = related.reduce((s: number, e: EnrichedEntry) => s + (e.amount_planned || 0), 0)
+      const actual = related.filter((e: EnrichedEntry) => e.status === 'paid').reduce((s: number, e: EnrichedEntry) => s + (e.amount_actual || e.amount_planned || 0), 0)
+      const status: 'paid'|'pending'|'overdue' = related.every((e: EnrichedEntry) => e.status === 'paid') ? 'paid' : (related.some((e: EnrichedEntry) => e.status === 'overdue') ? 'overdue' : 'pending')
+      const paymentDate = null
       return {
         id: cost.id,
         name: cost.name,
         type: cost.cost_type,
-        estimated: estimated,
-        actual: actual,
+        estimated,
+        actual,
         currency: displayCurrency,
-  provider: cost.provider,
+        provider: cost.provider,
         dueDay: cost.due_day,
-        status: entry?.status || 'pending',
-        paymentDate: entry?.payment_date,
+        status,
+        paymentDate,
         variance: estimated > 0 ? ((actual - estimated) / estimated) * 100 : 0
       }
     })
 
-    return NextResponse.json({ 
-      dashboard,
-      costs,
-      month: currentMonth.toISOString().split('T')[0]
-    })
+    return NextResponse.json({ dashboard, costs, entries, month: currentMonth.toISOString().split('T')[0] })
   } catch (error) {
     console.error('Error in getFixedCostsData:', error)
     return NextResponse.json({ error: 'Failed to get fixed costs data' }, { status: 500 })

@@ -26,6 +26,7 @@ function SortableItem({ id, children, editing, onRemove, size, onSizeChange, tit
     transform: CSS.Transform.toString(transform),
     transition,
   }
+  const sizeTextClass = size === 'small' ? 'text-xs sm:text-[13px]' : size === 'medium' ? 'text-[13px] sm:text-sm' : 'text-sm'
   return (
     <div ref={setNodeRef} style={style} className={`${sizeClasses[size]} relative`}>
       {editing && (
@@ -47,7 +48,11 @@ function SortableItem({ id, children, editing, onRemove, size, onSizeChange, tit
           )}
         </div>
       )}
-  {children}
+      <div className={`widget ${sizeTextClass}`} data-size={size}>
+        <div className="widget-body min-w-0">
+          {children}
+        </div>
+      </div>
     </div>
   )
 }
