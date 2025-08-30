@@ -121,8 +121,10 @@
       "paid": "Paid",
       "pending": "Pending",
       "overdue": "Overdue",
-      "topCategories": "Top Categories",
-      "noData": "No data available"
+  "topCategories": "Top Categories",
+  "noData": "No data available",
+  "totalUnpaid": "Total unpaid",
+  "allEntries": "Monthly entries"
     }
   },
   "transactions": {

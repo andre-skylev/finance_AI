@@ -122,8 +122,10 @@
       "paid": "Pagos",
       "pending": "Pendentes",
       "overdue": "Atrasados",
-      "topCategories": "Principais Categorias",
-      "noData": "Nenhum dado disponível"
+  "topCategories": "Principais Categorias",
+  "noData": "Nenhum dado disponível",
+  "totalUnpaid": "Total não pagos",
+  "allEntries": "Lançamentos do mês"
     }
   },
   "transactions": {

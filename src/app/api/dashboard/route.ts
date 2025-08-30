@@ -237,21 +237,26 @@ async function getCreditCardForecast(supabase: any, userId: string, displayCurre
     const results: any[] = []
     for (const c of cards) {
   const w = windows.get(c.id)!
+      // Sum all movements between statement close and due date to simulate invoice: purchases minus payments
       const { data: txs, error: txErr } = await supabase
         .from('credit_card_transactions')
-        .select('amount, currency, transaction_type')
+        .select('amount, currency, transaction_type, transaction_date')
         .eq('user_id', userId)
         .eq('credit_card_id', c.id)
-        .eq('transaction_type', 'purchase')
-        .gte('transaction_date', w.start)
-        .lt('transaction_date', w.endExclusive)
+        .gte('transaction_date', w.statementClose)
+        .lte('transaction_date', w.dueDate)
 
       if (txErr) {
         console.error('Error fetching cc tx for forecast:', txErr)
       }
 
-  // Only purchases are considered for upcoming statement forecast
-  const totalCardCurrency = (txs || []).reduce((sum: number, t: any) => sum + Number(t.amount || 0), 0)
+      // Purchases increase, payments decrease within close->due window
+      const totalWindow = (txs || []).reduce((sum: number, t: any) => {
+        const amt = Number(t.amount || 0)
+        if ((t.transaction_type || 'purchase') === 'payment') return sum - amt
+        return sum + amt
+      }, 0)
+      const totalCardCurrency = Math.max(0, Math.round(totalWindow * 100) / 100)
 
       const totalDisplay = convertAmount(totalCardCurrency, (c.currency || 'EUR'), displayCurrency, rates)
 
@@ -266,7 +271,7 @@ async function getCreditCardForecast(supabase: any, userId: string, displayCurre
         cycle_end_exclusive: w.endExclusive,
         statement_close: w.statementClose,
         upcoming_due_date: w.dueDate,
-        forecast_amount: Math.round(totalCardCurrency * 100) / 100,
+  forecast_amount: Math.round(totalCardCurrency * 100) / 100,
         forecast_converted: Math.round(totalDisplay * 100) / 100,
         display_currency: displayCurrency,
       })
